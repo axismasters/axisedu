@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- AXIS LMS · index.html · v1.1 (학생 추가 버튼 수정: populateTeacherSelect 추가) -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -3514,6 +3515,12 @@ function collectSubjects(){
   return [...document.querySelectorAll('#student-subjects-box input:checked')].map(i=>i.value);
 }
 
+function populateTeacherSelect(teacherId){
+  const tsel = document.getElementById('student-teacher');
+  if(!tsel) return;
+  tsel.innerHTML = `<option value="">미지정</option>` + DB.teachers.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  tsel.value = teacherId || '';
+}
 function openStudentModal(id){
   document.getElementById('student-modal-title').textContent = id ? '학생 정보 수정' : '학생 추가';
   document.getElementById('student-id').value = id||'';
