@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:wght@400;700&family=Hanken+Grotesk:wght@300;400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --primary:#000926;
@@ -1854,8 +1855,64 @@ function loadDB(){
 }
 function saveDB(){
   try{ if(typeof Auth!=='undefined') Auth.sync(); }catch(e){ console.error('auth sync failed', e); }
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }
-  catch(e){ console.error('save failed', e); }
+  let okLocal = false;
+  try{
+    localStorage.setItem(STORE_KEY, JSON.stringify(DB));
+    okLocal = true;
+  }catch(e){
+    console.error('save failed', e);
+    const quota = e && (e.name==='QuotaExceededError' || e.code===22 || /quota|exceeded/i.test(e.message||''));
+    if(!saveDB._warned){
+      saveDB._warned = true;
+      alert(quota
+        ? '저장 공간이 가득 찼습니다. 불필요한 데이터를 정리하거나 백업 후 삭제해 주세요.'
+        : '데이터 저장에 실패했습니다. (시크릿 모드 등에서는 저장이 제한될 수 있습니다)');
+    }
+  }
+  // 클라우드 연결 시 서버에도 반영 (staff만 쓰기 가능, 실패해도 로컬은 유지)
+  try{ if(window.CLOUD && window.CLOUD.enabled) window.CLOUD.scheduleSave(); }catch(e){ console.error('cloud schedule failed', e); }
+  return okLocal;
+}
+
+/* ===== 공통 유틸 (검증 / 참조 정리) ===== */
+/** 휴대폰 형식 검사: 010xxxxxxxx / 010-xxxx-xxxx 등 (01로 시작, 숫자 10~11자리) */
+function isValidPhone(p){ return /^01[0-9]{8,9}$/.test((p||'').replace(/[^0-9]/g,'')); }
+
+/** 학생 삭제 시 흩어진 모든 참조를 정리한다 (라이벌/매치/포인트/연결 등 dangling 방지) */
+function purgeStudentRefs(id){
+  try{
+    if(DB.rivals){
+      Object.keys(DB.rivals).forEach(sid=>{ if(DB.rivals[sid] && DB.rivals[sid].rivalId===id) delete DB.rivals[sid]; });
+      delete DB.rivals[id];
+    }
+    DB.rivalMatches  = (DB.rivalMatches||[]).filter(m=> m && m.studentId!==id && m.rivalId!==id);
+    DB.rivalHistory  = (DB.rivalHistory||[]).filter(h=> h && h.studentId!==id && h.fromRivalId!==id && h.toRivalId!==id);
+    DB.recoLog       = (DB.recoLog||[]).filter(r=> r && r.studentId!==id && r.recommendedId!==id);
+    Object.values(DB.scores||{}).forEach(map=>{ if(map) delete map[id]; });
+    ['activity','points','emblems','goals','achievement'].forEach(k=>{ if(DB[k]) delete DB[k][id]; });
+    if(DB.seasonPoints) Object.keys(DB.seasonPoints).forEach(seasonId=>{ if(DB.seasonPoints[seasonId]) delete DB.seasonPoints[seasonId][id]; });
+    if(Array.isArray(DB.guardianLinks)) DB.guardianLinks = DB.guardianLinks.filter(l=> l && l.studentId!==id);
+    if(Array.isArray(DB.parents)) DB.parents = DB.parents.filter(p=> p && DB.guardianLinks.some(l=> l.parentId===p.id)); // 고아 학부모 정리
+  }catch(e){ console.error('purgeStudentRefs failed', e); }
+}
+
+/** 시험 삭제 시 점수 + 해당 시험을 참조하는 라이벌 매치를 정리한다 */
+function purgeExamRefs(id){
+  try{
+    if(DB.scores) delete DB.scores[id];
+    DB.rivalMatches = (DB.rivalMatches||[]).filter(m=> m && m.examRef!==id);
+  }catch(e){ console.error('purgeExamRefs failed', e); }
+}
+
+/** 차트 데이터가 없을 때 캔버스에 안내 문구 출력 */
+function chartEmpty(canvas, msg){
+  if(!canvas || !canvas.getContext) return;
+  const w = canvas.width || canvas.clientWidth || 320, h = canvas.height || canvas.clientHeight || 160;
+  const c = canvas.getContext('2d'); if(!c) return;
+  c.clearRect(0,0,w,h); c.save();
+  c.fillStyle='#9aa3b5'; c.textAlign='center'; c.textBaseline='middle';
+  c.font='14px "Hanken Grotesk", sans-serif';
+  c.fillText(msg, w/2, h/2); c.restore();
 }
 function uid(){ return 'id_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 
@@ -3344,12 +3401,29 @@ function saveTeacher(){
   const name = document.getElementById('teacher-name').value.trim();
   if(!name){ alert('이름을 입력해주세요.'); return; }
   const id = document.getElementById('teacher-id').value;
+  const phone = document.getElementById('teacher-phone').value.trim();
+  // 이름 중복 검사 (다른 선생님과 동일)
+  if(DB.teachers.some(t=> t.id!==id && (t.name||'').trim()===name)){
+    alert('이미 같은 이름의 선생님이 등록되어 있습니다.'); return;
+  }
+  // 휴대폰: 입력 시 형식 검사 + 중복(로그인 ID) 검사
+  if(phone){
+    if(!isValidPhone(phone)){ alert('휴대폰 번호 형식이 올바르지 않습니다. (예: 010-1234-5678)'); return; }
+    const np = phone.replace(/[^0-9]/g,'');
+    if(DB.teachers.some(t=> t.id!==id && (t.phone||'').replace(/[^0-9]/g,'')===np)){
+      alert('이미 등록된 휴대폰 번호입니다.'); return;
+    }
+  }
   const data = {
     name,
     subject: document.getElementById('teacher-subject').value.trim(),
-    phone: document.getElementById('teacher-phone').value.trim(),
+    phone,
   };
-  if(id){ Object.assign(DB.teachers.find(x=>x.id===id), data); }
+  if(id){
+    const t = DB.teachers.find(x=>x.id===id);
+    if(!t){ alert('대상 선생님을 찾을 수 없습니다. 목록을 새로고침해 주세요.'); return; }
+    Object.assign(t, data);
+  }
   else { DB.teachers.push({ id: uid(), ...data }); }
   saveDB();
   closeTeacherModal();
@@ -3443,12 +3517,28 @@ function saveStudent(){
   const name = document.getElementById('student-name').value.trim();
   if(!name){ alert('이름을 입력해주세요.'); return; }
   const id = document.getElementById('student-id').value;
+  const phone = document.getElementById('student-phone').value.trim();
+  const parentPhone = document.getElementById('student-parent-phone').value.trim();
+  // 휴대폰 형식 검사 (입력된 경우)
+  if(phone && !isValidPhone(phone)){ alert('학생 휴대폰 번호 형식이 올바르지 않습니다. (예: 010-1234-5678)'); return; }
+  if(parentPhone && !isValidPhone(parentPhone)){ alert('학부모 휴대폰 번호 형식이 올바르지 않습니다.'); return; }
+  // 휴대폰 중복(로그인 ID) 검사
+  if(phone){
+    const np = phone.replace(/[^0-9]/g,'');
+    if(DB.students.some(s=> s.id!==id && (s.phone||'').replace(/[^0-9]/g,'')===np)){
+      alert('이미 등록된 학생 휴대폰 번호입니다.'); return;
+    }
+  }
+  // 동명이인 안내 (차단하지 않고 확인)
+  if(DB.students.some(s=> s.id!==id && (s.name||'').trim()===name)){
+    if(!confirm('같은 이름의 학생이 이미 있습니다. 그래도 등록할까요?')) return;
+  }
   const data = {
     name,
     grade: document.getElementById('student-grade').value,
     cls: document.getElementById('student-class').value.trim(),
-    phone: document.getElementById('student-phone').value.trim(),
-    parentPhone: document.getElementById('student-parent-phone').value.trim(),
+    phone,
+    parentPhone,
     kakao: document.getElementById('student-kakao').value.trim(),
     parentKakao: document.getElementById('student-parent-kakao').value.trim(),
     teacherId: document.getElementById('student-teacher').value,
@@ -3459,6 +3549,7 @@ function saveStudent(){
   };
   if(id){
     const s = DB.students.find(x=>x.id===id);
+    if(!s){ alert('대상 학생을 찾을 수 없습니다. 목록을 새로고침해 주세요.'); return; }
     delete s.courseSubject; delete s.courseStage;
     Object.assign(s, data);
   } else {
@@ -3472,11 +3563,12 @@ function saveStudent(){
   renderAll();
 }
 function deleteStudent(id){
-  if(!confirm('이 학생을 삭제하시겠습니까? 관련된 성적 데이터도 함께 삭제됩니다.')) return;
+  const s = DB.students.find(x=>x.id===id);
+  if(!s){ return; }
+  if(!confirm(`'${s.name}' 학생을 삭제하시겠습니까?\n\n삭제 시 성적·라이벌·상담(활동)·포인트·엠블럼·목표·학부모 연결 기록도 함께 삭제됩니다. (되돌릴 수 없음)`)) return;
   DB.students = DB.students.filter(x=>x.id!==id);
-  Object.values(DB.scores).forEach(map=>{ delete map[id]; });
-  saveDB();
-  renderAll();
+  purgeStudentRefs(id);
+  if(saveDB()) renderAll();
 }
 
 /* ---------- render: exams ---------- */
@@ -3583,21 +3675,34 @@ function recalcExamMax(){
 function saveExam(){
   const name = document.getElementById('exam-name').value.trim();
   if(!name){ alert('시험명을 입력해주세요.'); return; }
+  const date = document.getElementById('exam-date').value;
+  if(!date){ alert('시험 날짜를 선택해주세요.'); return; }
+  if(isNaN(new Date(date).getTime())){ alert('시험 날짜가 올바르지 않습니다.'); return; }
   const questions = collectQuestions();
   const hasQ = questions.length>0;
-  if(hasQ && questions.some(q=>q.points<=0)){
-    if(!confirm('배점이 0인 문항이 있습니다. 이대로 저장할까요?')) return;
+  if(hasQ){
+    const sum = questions.reduce((a,q)=>a+(Number(q.points)||0),0);
+    if(sum<=0){ alert('문항 배점의 합계가 0입니다. 배점을 확인해주세요.'); return; }
+    if(questions.some(q=>(Number(q.points)||0)<=0)){
+      if(!confirm('배점이 0인 문항이 있습니다. 이대로 저장할까요?')) return;
+    }
+  } else {
+    const maxv = Number(document.getElementById('exam-max').value);
+    if(document.getElementById('exam-max').value!=='' && (isNaN(maxv) || maxv<=0)){
+      alert('총점(만점)이 올바르지 않습니다.'); return;
+    }
   }
   const id = document.getElementById('exam-id').value;
   const data = {
     name,
-    date: document.getElementById('exam-date').value,
+    date,
     type: document.getElementById('exam-type').value,
-    max: hasQ ? questions.reduce((a,q)=>a+q.points,0) : (Number(document.getElementById('exam-max').value)||100),
+    max: hasQ ? questions.reduce((a,q)=>a+(Number(q.points)||0),0) : (Number(document.getElementById('exam-max').value)||100),
     questions,
   };
   if(id){
     const ex = DB.exams.find(x=>x.id===id);
+    if(!ex){ alert('대상 시험을 찾을 수 없습니다. 목록을 새로고침해 주세요.'); return; }
     Object.assign(ex, data);
   } else {
     const newId = uid();
@@ -3609,11 +3714,12 @@ function saveExam(){
   renderAll();
 }
 function deleteExam(id){
-  if(!confirm('이 시험을 삭제하시겠습니까? 입력된 점수도 함께 삭제됩니다.')) return;
+  const ex = DB.exams.find(x=>x.id===id);
+  if(!ex){ return; }
+  if(!confirm(`'${ex.name}' 시험을 삭제하시겠습니까?\n\n입력된 점수와 이 시험으로 만들어진 라이벌 대결 기록도 함께 삭제됩니다. (되돌릴 수 없음)`)) return;
   DB.exams = DB.exams.filter(x=>x.id!==id);
-  delete DB.scores[id];
-  saveDB();
-  renderAll();
+  purgeExamRefs(id);
+  if(saveDB()) renderAll();
 }
 
 /* ---------- score input ---------- */
@@ -3735,8 +3841,19 @@ function setEssay(examId, studentId, qNo, val, maxPts){
 }
 function updateScore(examId, inputEl){
   if(!DB.scores[examId]) DB.scores[examId] = {};
-  const v = inputEl.value;
-  DB.scores[examId][inputEl.dataset.student] = v==='' ? '' : Number(v);
+  const exam = DB.exams.find(e=>e.id===examId);
+  const max = exam ? (Number(exam.max)||100) : 100;
+  const raw = (inputEl.value||'').trim();
+  let stored;
+  if(raw===''){ stored=''; }
+  else {
+    let n = Number(raw);
+    if(isNaN(n)){ n = 0; }
+    n = Math.max(0, Math.min(max, n));   // 0~만점 범위로 보정
+    stored = n;
+    if(String(n)!==raw) inputEl.value = n; // 보정값을 입력칸에도 반영
+  }
+  DB.scores[examId][inputEl.dataset.student] = stored;
   saveDB();
   recalcRivalForExam(examId);
   renderScoreTable();
@@ -3778,8 +3895,10 @@ function renderStatsCharts(){
   });
 
   const ctx = document.getElementById('examStatsChart');
-  if(examStatsChartInst) examStatsChartInst.destroy();
-  examStatsChartInst = new Chart(ctx, {
+  if(!ctx) return;
+  if(examStatsChartInst){ examStatsChartInst.destroy(); examStatsChartInst=null; }
+  if(!labels.length){ chartEmpty(ctx, '표시할 시험 데이터가 없습니다. 시험을 먼저 생성하세요.'); }
+  else examStatsChartInst = new Chart(ctx, {
     type:'bar',
     data:{
       labels,
@@ -3815,7 +3934,9 @@ function renderTrendChart(){
   const avgData = sorted.map(e=>examAverage(e.id));
 
   const ctx = document.getElementById('trendChart');
-  if(trendChartInst) trendChartInst.destroy();
+  if(!ctx) return;
+  if(trendChartInst){ trendChartInst.destroy(); trendChartInst=null; }
+  if(!labels.length){ chartEmpty(ctx, '표시할 데이터가 없습니다.'); return; }
   trendChartInst = new Chart(ctx, {
     type:'line',
     data:{
@@ -4043,7 +4164,7 @@ function gwBadge(sid){
   try{
     if(!window.AXISEngine || typeof buildAchievementData!=='function') return '';
     const d = (DB.achievement && DB.achievement[sid]) ? DB.achievement[sid] : buildAchievementData(sid);
-    return `<span style="display:inline-block;background:var(--primary);color:#eac076;font-weight:700;border-radius:6px;padding:1px 7px;font-size:10.5px;margin-left:4px;vertical-align:middle;">Lv ${d.level} · 🎖 ${window.AXISEngine.emblemCount(d)}</span>`;
+    return `<span class="gw-levelbadge">Lv ${d.level} · 🎖 ${window.AXISEngine.emblemCount(d)}</span>`;
   }catch(e){ return ''; }
 }
 
@@ -4345,10 +4466,18 @@ function updateLoginHint(){
 }
 
 /**
- * 로그인 처리. Master=아이디, Teacher/Student/Parent=휴대폰 번호 + 비밀번호.
- * 초기 비밀번호(axis1234) 사용 계정은 강제 비밀번호 변경 화면으로 이동한다.
+ * 로그인 진입점. 클라우드(Supabase) 연결 시 클라우드 로그인, 아니면 기존 로컬 로그인.
  */
 function doLogin(){
+  if(window.CLOUD && window.CLOUD.enabled) return doLoginCloud();
+  return doLoginLocal();
+}
+
+/**
+ * 로컬(localStorage) 로그인. Master=아이디, Teacher/Student/Parent=휴대폰 번호 + 비밀번호.
+ * 초기 비밀번호(axis1234) 사용 계정은 강제 비밀번호 변경 화면으로 이동한다.
+ */
+function doLoginLocal(){
   const idRaw   = document.getElementById('login-id').value.trim();
   const pw      = document.getElementById('login-pw').value;
   const remember= document.getElementById('login-remember').checked;
@@ -4423,6 +4552,10 @@ function hideForceChange(){
   const hint = document.getElementById('login-hint'); if(hint) hint.style.display='';
 }
 function submitForceChange(){
+  if(window.CLOUD && window.CLOUD.enabled && pendingCred && pendingCred.kind==='cloud') return submitForceChangeCloud();
+  return submitForceChangeLocal();
+}
+function submitForceChangeLocal(){
   const p1 = document.getElementById('fc-pw1').value;
   const p2 = document.getElementById('fc-pw2').value;
   const err = document.getElementById('fc-error');
@@ -4442,6 +4575,7 @@ function submitForceChange(){
 
 function doLogout(){
   SESSION = null;
+  try{ if(window.CLOUD && window.CLOUD.enabled) window.CLOUD.signOut(); }catch(e){}
   try{ localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); }catch(e){}
   document.getElementById('app-root').classList.add('hidden');
   document.getElementById('login-screen').style.display='flex';
@@ -4701,8 +4835,10 @@ function renderMyTrend(){
 
   const avgData = sorted.map(e=>examAverage(e.id));
   const ctx = document.getElementById('myTrendChart');
-  if(myTrendChartInst) myTrendChartInst.destroy();
-  myTrendChartInst = new Chart(ctx,{
+  if(ctx){
+    if(myTrendChartInst){ myTrendChartInst.destroy(); myTrendChartInst=null; }
+    if(!sorted.length){ chartEmpty(ctx, '아직 시험 기록이 없습니다.'); }
+    else myTrendChartInst = new Chart(ctx,{
     type:'line',
     data:{ labels:sorted.map(e=>e.name), datasets:[
       {label:'내 점수', data:myScores, borderColor:'#785919', backgroundColor:'#785919', tension:.3, spanGaps:true, borderWidth:3, pointRadius:4},
@@ -4710,7 +4846,163 @@ function renderMyTrend(){
     ]},
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,max:100}} }
   });
+  }
   renderRankBoard();
+}
+
+/* ====================================================================
+   CLOUD · Supabase 연동 (로그인 + 클라우드 저장)
+   - 설정이 있으면 Supabase Auth로 로그인하고 데이터를 academy_state에 보관.
+   - 미설정/초기화 실패/네트워크 오류 시 기존 localStorage 동작으로 자동 폴백.
+   ==================================================================== */
+window.CLOUD = {
+  url: 'https://xixdzpxatopxqoncqfnn.supabase.co',
+  key: 'sb_publishable_cJCBPz9HGZod39SR-twrbQ_LsSiFvp-',
+  emailDomain: 'axis-lab.xyz',
+  sb: null,
+  enabled: false,
+  _t: null,
+  init(){
+    try{
+      if(this.url && this.key && window.supabase && window.supabase.createClient){
+        this.sb = window.supabase.createClient(this.url, this.key);
+        this.enabled = true;
+      }
+    }catch(e){ console.error('CLOUD init failed', e); this.enabled = false; }
+    return this.enabled;
+  },
+  emailFor(loginId){ return String(loginId||'').toLowerCase() + '@' + this.emailDomain; },
+  async profile(){
+    const { data:{ user } } = await this.sb.auth.getUser();
+    if(!user) return null;
+    const { data, error } = await this.sb.from('profiles')
+      .select('role,login_id,name,must_change,student_id,child_ids').eq('id', user.id).single();
+    if(error){ console.error('profile fetch', error); return null; }
+    return data;
+  },
+  async pull(){
+    try{
+      const { data, error } = await this.sb.from('academy_state').select('data').eq('id',1).single();
+      if(error){ console.error('cloud pull', error); return false; }
+      const cloud = data && data.data;
+      if(cloud && typeof cloud==='object' && Object.keys(cloud).length){
+        Object.keys(DB).forEach(k=>{ delete DB[k]; });
+        Object.assign(DB, cloud);
+        try{ Auth.migrate(); }catch(e){}
+        try{ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }catch(e){}
+        return true;
+      }
+      await this.push(true);   // 클라우드가 비어 있으면 현재 데이터를 올린다
+      return true;
+    }catch(e){ console.error('cloud pull failed', e); return false; }
+  },
+  async push(initial){
+    if(!this.enabled || !this.sb) return false;
+    try{
+      const { error } = await this.sb.from('academy_state').update({ data: DB }).eq('id',1);
+      if(error){ if(initial) console.warn('cloud push denied/failed:', error.message); return false; }
+      return true;
+    }catch(e){ console.error('cloud push failed', e); return false; }
+  },
+  scheduleSave(){
+    if(!this.enabled) return;
+    clearTimeout(this._t);
+    this._t = setTimeout(()=>{ this.push(); }, 1200);
+  },
+  async signOut(){ try{ if(this.sb) await this.sb.auth.signOut(); }catch(e){} }
+};
+
+/** Supabase 프로필(role/login_id) → 앱 세션 객체 */
+function buildSessionFromProfile(prof){
+  if(!prof) return null;
+  const role = prof.role;
+  const loginId = Auth.norm(prof.login_id||'') || String(prof.login_id||'').toLowerCase();
+  if(role==='master'){ return { role:'admin', name:'최고관리자', account:'AxMaster', master:true }; }
+  if(role==='teacher'){
+    const t = DB.teachers.find(t=>Auth.norm(t.phone)===loginId);
+    return { role:'teacher', name:(t?t.name:(prof.name||'선생님')), teacherId:(t?t.id:null), phone:loginId };
+  }
+  if(role==='student'){
+    const s = DB.students.find(s=>Auth.norm(s.phone)===loginId);
+    if(!s) return null;
+    return { role:'student', name:s.name, account:s.account, studentId:s.id, phone:loginId };
+  }
+  if(role==='parent'){
+    const kids = Auth.childrenOf(loginId);
+    if(!kids.length) return null;
+    const par = DB.parents.find(x=>Auth.norm(x.phone)===loginId);
+    return { role:'parent', name:(par&&par.name?par.name:'학부모')+' 학부모', parentPhone:loginId, childIds:kids, studentId:kids[0] };
+  }
+  return null;
+}
+
+let cloudBusy = false;
+function setLoginBusy(b){
+  cloudBusy = b;
+  const btn = document.querySelector('#login-form .login-submit') || document.querySelector('#login-form button[type="submit"]');
+  if(btn){ btn.disabled = b; btn.style.opacity = b ? '.6' : ''; btn.textContent = b ? '로그인 중…' : (btn.dataset._label || btn.textContent); }
+}
+
+/** Supabase Auth 로그인 */
+async function doLoginCloud(){
+  if(cloudBusy) return;
+  const idRaw    = document.getElementById('login-id').value.trim();
+  const pw       = document.getElementById('login-pw').value;
+  const remember = document.getElementById('login-remember').checked;
+  const errEl    = document.getElementById('login-error');
+  errEl.style.display='none';
+
+  let loginId;
+  if(loginRole==='master'){
+    loginId = (idRaw==='' || idRaw.toLowerCase()==='axmaster') ? 'axmaster' : (Auth.norm(idRaw)||'axmaster');
+  } else {
+    loginId = Auth.norm(idRaw);
+    if(loginId.length<8){ errEl.textContent='휴대폰 번호를 다시 확인해주세요.'; errEl.style.display='block'; return; }
+  }
+  if(!pw){ errEl.textContent='비밀번호를 입력해주세요.'; errEl.style.display='block'; return; }
+
+  setLoginBusy(true);
+  try{
+    const { error } = await CLOUD.sb.auth.signInWithPassword({ email: CLOUD.emailFor(loginId), password: pw });
+    if(error){ errEl.textContent='아이디(휴대폰) 또는 비밀번호가 올바르지 않습니다.'; errEl.style.display='block'; setLoginBusy(false); return; }
+    const prof = await CLOUD.profile();
+    if(!prof){ errEl.textContent='계정 정보를 불러오지 못했습니다. 관리자에게 문의하세요.'; errEl.style.display='block'; await CLOUD.signOut(); setLoginBusy(false); return; }
+    await CLOUD.pull();
+    updateLoginHint();
+    const sess = buildSessionFromProfile(prof);
+    if(!sess){ errEl.textContent='이 계정과 연결된 학생/선생님 정보를 찾을 수 없습니다.'; errEl.style.display='block'; await CLOUD.signOut(); setLoginBusy(false); return; }
+    setLoginBusy(false);
+    if(prof.must_change){
+      pendingSession = sess; pendingCred = { kind:'cloud' }; pendingRemember = remember;
+      showForceChange(); return;
+    }
+    finalizeLogin(sess, remember);
+  }catch(e){
+    console.error('cloud login error', e);
+    errEl.textContent='로그인 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.'; errEl.style.display='block';
+    setLoginBusy(false);
+  }
+}
+
+/** Supabase 비밀번호 강제 변경 */
+async function submitForceChangeCloud(){
+  const p1 = document.getElementById('fc-pw1').value;
+  const p2 = document.getElementById('fc-pw2').value;
+  const err = document.getElementById('fc-error');
+  if(!p1 || p1.length<6 || p1!==p2 || p1===INIT_PW){
+    err.textContent = (p1===INIT_PW) ? '초기 비밀번호와 다른 비밀번호를 사용하세요.' : '비밀번호가 일치하지 않거나 너무 짧습니다.(6자 이상)';
+    err.style.display='block'; return;
+  }
+  err.style.display='none';
+  try{
+    const { error } = await CLOUD.sb.auth.updateUser({ password: p1 });
+    if(error){ err.textContent='비밀번호 변경 실패: '+error.message; err.style.display='block'; return; }
+    try{ await CLOUD.sb.rpc('complete_password_change'); }catch(e){ console.error('rpc complete_password_change', e); }
+  }catch(e){ console.error('cloud pw change', e); err.textContent='비밀번호 변경 중 오류가 발생했습니다.'; err.style.display='block'; return; }
+  const s = pendingSession, r = pendingRemember;
+  pendingSession = pendingCred = null;
+  hideForceChange();
+  finalizeLogin(s, r);
 }
 
 /* ---------- boot ---------- */
@@ -4718,16 +5010,133 @@ function renderMyTrend(){
   const a=document.getElementById('login-logo-img'); if(a) a.src=LOGO_SRC;
   const b=document.getElementById('sidebar-logo-img'); if(b) b.src=LOGO_SRC;
 })();
-loadDB();
-seedIfEmpty();
-Auth.migrate();          // 계정/번호/학부모 junction 무중단 마이그레이션
-updateLoginHint();
-if(restoreSession()){
-  enterApp();
-} else {
+
+function showLoginScreen(){
   document.getElementById('login-screen').style.display='flex';
   document.getElementById('app-root').classList.add('hidden');
 }
+
+async function boot(){
+  loadDB();
+  seedIfEmpty();
+  Auth.migrate();
+  updateLoginHint();
+
+  const cloudOn = window.CLOUD.init();
+  if(cloudOn){
+    try{
+      const { data:{ session } } = await CLOUD.sb.auth.getSession();
+      if(session){
+        const prof = await CLOUD.profile();
+        if(prof){
+          await CLOUD.pull();
+          updateLoginHint();
+          const sess = buildSessionFromProfile(prof);
+          if(sess && !prof.must_change){ SESSION = sess; enterApp(); return; }
+          if(sess && prof.must_change){
+            pendingSession = sess; pendingCred = { kind:'cloud' }; pendingRemember = true;
+            showLoginScreen(); showForceChange(); return;
+          }
+        }
+        await CLOUD.signOut();   // 프로필/세션 구성 실패 → 로그아웃 후 로그인 화면
+      }
+    }catch(e){ console.error('cloud boot failed', e); }
+    showLoginScreen();
+    return;
+  }
+
+  // 로컬 모드 (클라우드 미설정/초기화 실패) — 기존 동작
+  if(restoreSession()) enterApp(); else showLoginScreen();
+}
+boot();
 </script>
+<style id="ui-refresh">
+/* ====================================================================
+   AXIS · PREMIUM UI REFRESH  (additive override layer, loads last)
+   기존 구조/기능은 그대로, 시각 톤만 목업 수준으로 끌어올린다.
+   ==================================================================== */
+:root{
+  --gold-grad:linear-gradient(135deg,#785919 0%,#eac076 100%);
+  --navy-grad:linear-gradient(135deg,#0f1a37 0%,#000926 100%);
+  --shadow-card:0 4px 24px rgba(0,9,38,.06);
+  --shadow-lift:0 16px 40px -14px rgba(0,9,38,.22);
+}
+body{ background:#f7f4ee; }
+
+/* ---- cards: rounded, soft shadow, hover lift (bento feel) ---- */
+.card{
+  border-radius:14px !important;
+  border:1px solid rgba(0,9,38,.07) !important;
+  box-shadow:var(--shadow-card) !important;
+  transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.card:hover{ transform:translateY(-2px); box-shadow:var(--shadow-lift); }
+.stat-card{ border-radius:14px !important; }
+.stat-card:hover{ border-color:rgba(120,89,25,.4); }
+.stat-card .lbl{ letter-spacing:.14em; font-size:11px; }
+.stat-card .val{ font-size:30px; letter-spacing:-.01em; }
+
+/* ---- headings ---- */
+.page-head h1{ letter-spacing:-.015em; }
+.page-head .eyebrow{ letter-spacing:.16em; }
+
+/* ---- sidebar polish ---- */
+.sidebar{ background:linear-gradient(180deg,#001034 0%,#000926 62%); }
+.sidebar-brand .title{ letter-spacing:.01em; }
+.nav a{ border-left:4px solid transparent; border-radius:10px; transition:background .18s, color .18s, border-color .18s; }
+.nav a .msym{ opacity:.92; }
+.nav a:hover{ background:rgba(255,255,255,.07); }
+.nav a.active{
+  background:linear-gradient(90deg, rgba(234,192,118,.18), rgba(234,192,118,.02));
+  border-left-color:var(--secondary-fixed-dim); color:#fff;
+}
+.nav a.active .msym{ font-variation-settings:'FILL' 1,'wght' 500; color:var(--secondary-fixed-dim); }
+.nav-group{ letter-spacing:.14em; }
+
+/* ---- buttons: depth + press feedback ---- */
+.btn{ border-radius:10px; transition:transform .12s ease, box-shadow .15s ease, filter .15s, opacity .15s, background .15s; }
+.btn:active{ transform:scale(.97); }
+.btn-primary{ background:var(--navy-grad); box-shadow:0 6px 16px -6px rgba(0,9,38,.5); }
+.btn-primary:hover{ box-shadow:0 10px 24px -8px rgba(0,9,38,.55); opacity:1; }
+.btn-gold{ background:var(--gold-grad); box-shadow:0 6px 16px -6px rgba(120,89,25,.5); }
+.btn-gold:hover{ filter:brightness(1.06); opacity:1; }
+
+/* ---- search → pill ---- */
+.search-box input{ border-radius:999px; background:var(--surface-low); border-color:transparent; }
+.search-box input:focus{ background:#fff; box-shadow:0 0 0 2px rgba(120,89,25,.25) !important; border-color:transparent !important; }
+
+/* ---- inputs: warm gold focus ---- */
+input:focus,select:focus,textarea:focus{ border-color:var(--secondary) !important; box-shadow:0 0 0 2px rgba(120,89,25,.18) !important; }
+
+/* ---- tables ---- */
+thead th{ letter-spacing:.12em; font-size:11px; background:rgba(0,9,38,.025); }
+tbody tr{ transition:background .15s; }
+tbody tr:hover{ background:rgba(120,89,25,.045); }
+.badge{ padding:4px 11px; letter-spacing:.02em; }
+
+/* ---- growth level badge (student list) → champagne gradient ---- */
+.gw-levelbadge{
+  display:inline-block; background:var(--gold-grad); color:#fff; font-weight:800;
+  border-radius:7px; padding:2px 8px; font-size:10.5px; margin-left:6px; vertical-align:middle;
+  letter-spacing:.02em; box-shadow:0 2px 6px -2px rgba(120,89,25,.6);
+}
+
+/* ---- growth dashboard polish ---- */
+.gw-card{ border-radius:14px; transition:transform .2s ease, box-shadow .2s ease; }
+.gw-card:hover{ transform:translateY(-2px); box-shadow:var(--shadow-lift); }
+.gw-xp .bar>i{ background:linear-gradient(90deg,#785919,#eac076,#785919); background-size:200% auto; animation:axShimmer 4s linear infinite; }
+@keyframes axShimmer{ to{ background-position:200% center; } }
+
+/* ---- premium scrollbar ---- */
+::-webkit-scrollbar{ width:8px; height:8px; }
+::-webkit-scrollbar-track{ background:transparent; }
+::-webkit-scrollbar-thumb{ background:#d9d6cf; border-radius:10px; }
+::-webkit-scrollbar-thumb:hover{ background:#b9a06a; }
+
+/* ---- login card refinement ---- */
+.role-tabs button.active{ position:relative; }
+.login-submit{ transition:transform .12s ease, box-shadow .15s; }
+.login-submit:active{ transform:scale(.98); }
+</style>
 </body>
 </html>
