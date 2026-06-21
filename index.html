@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- AXIS LMS · index.html · v1.2 (선생님 계정 생성 기능 추가) -->
+<!-- AXIS LMS · index.html · v1.3 (학생·선생님 개별 추가 시 로그인 계정 자동 생성) -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -3417,6 +3417,24 @@ function renderTeachers(){
     </tr>`;
   }).join('');
 }
+/* ===== 개별 추가 시 로그인 계정 자동 생성 (마스터 + 클라우드 + 휴대폰 있을 때) ===== */
+function acctToast(msg){ try{ gwToast('', msg, ''); }catch(e){ console.log(msg); } }
+async function autoCreateAccount(role, name, phone){
+  if(!(window.CLOUD && window.CLOUD.enabled)) return;   // 로컬 모드면 생략
+  if(!isAdminUser()) return;                              // 마스터만 계정 생성
+  if(!isValidPhone(phone)) return;                        // 휴대폰 없으면 계정 생략
+  const login_id = Auth.norm(phone);
+  try{
+    const { data, error } = await CLOUD.sb.functions.invoke('create-students', { body:{ students:[{ name, login_id, role }] } });
+    if(error){ acctToast(`⚠️ ${name} 계정 생성 실패: ${error.message||error}`); return; }
+    if(data && data.error){ acctToast(`⚠️ ${data.error}`); return; }
+    const r = (data && data.results && data.results[0]) || {};
+    if(r.ok) acctToast(`✓ ${name} 로그인 계정 생성됨 · 휴대폰 + 초기비번 axis1234`);
+    else if(/already|exists|registered/i.test(r.error||'')) acctToast(`${name} · 이미 계정이 있습니다`);
+    else acctToast(`⚠️ ${name} 계정 생성 실패: ${r.error||''}`);
+  }catch(e){ console.error('autoCreateAccount', e); acctToast(`⚠️ ${name} 계정 생성 중 오류`); }
+}
+
 /* ===== 선생님 로그인 계정 생성 (마스터 전용) ===== */
 async function createTeacherAccounts(){
   if(!isAdminUser()){ alert('선생님 계정 생성은 마스터(최고관리자)만 사용할 수 있습니다.'); return; }
@@ -3489,6 +3507,7 @@ function saveTeacher(){
   saveDB();
   closeTeacherModal();
   renderAll();
+  if(!id) autoCreateAccount('teacher', name, phone);   // 신규 선생님 → 로그인 계정 자동 생성
 }
 function deleteTeacher(id){
   const count = DB.students.filter(s=>s.teacherId===id).length;
@@ -3713,6 +3732,7 @@ function saveStudent(){
   saveDB();
   closeStudentModal();
   renderAll();
+  if(!id) autoCreateAccount('student', name, phone);   // 신규 학생 → 로그인 계정 자동 생성
 }
 function deleteStudent(id){
   const s = DB.students.find(x=>x.id===id);
