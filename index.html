@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- AXIS LMS · index.html · v1.3 (학생·선생님 개별 추가 시 로그인 계정 자동 생성) -->
+<!-- AXIS LMS · index.html · v1.4 (학생 마이페이지 본인정보 서버 저장: self-update) -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -3354,7 +3354,7 @@ function renderMyInfo(){
       <input type="text" id="mi-nickname" value="${s.nickname||''}" placeholder="다른 학생에게 보여질 별명">
     </div>
     <div class="field-row">
-      <div class="field"><label>내 전화번호 (로그인 ID로도 사용)</label><input type="text" id="mi-phone" value="${s.phone||''}"></div>
+      <div class="field"><label>내 전화번호 (로그인 ID · 변경 불가)</label><input type="text" id="mi-phone" value="${s.phone||''}" readonly style="background:var(--surface-low);"></div>
       <div class="field"><label>학부모 전화번호</label><input type="text" id="mi-pphone" value="${s.parentPhone||''}"></div>
     </div>
     <div class="field-row">
@@ -3364,7 +3364,7 @@ function renderMyInfo(){
     <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button class="btn btn-primary" onclick="saveMyInfo()">저장</button></div>
     <p class="helper" style="margin-top:14px;">학년/반, 담당 선생님, 학습 과정은 선생님이 관리합니다. 변경이 필요하면 선생님께 문의하세요.</p>`;
 }
-function saveMyInfo(){
+async function saveMyInfo(){
   if(SESSION.role==='admin'){
     const t = DB.teachers.find(x=>x.id===SESSION.teacherId);
     if(t){
@@ -3373,27 +3373,43 @@ function saveMyInfo(){
       t.phone = document.getElementById('mi-phone').value.trim();
       SESSION.name = t.name;
     }
+    saveDB();
   } else if(SESSION.role==='parent'){
     const np = document.getElementById('mi-pphone').value.trim();
     (SESSION.childIds||[]).forEach(id=>{ const s=DB.students.find(x=>x.id===id); if(s) s.parentPhone=np; });
     SESSION.parentPhone = normalizePhone(np);
+    saveDB();
   } else {
+    // 학생: 본인 항목만 서버에 안전하게 저장 (전화번호=로그인ID는 변경 불가)
     const s = DB.students.find(x=>x.id===SESSION.studentId);
+    let updates = null;
     if(s){
-      s.name = document.getElementById('mi-name').value.trim()||s.name;
-      const nn = document.getElementById('mi-nickname'); if(nn) s.nickname = nn.value.trim();
-      s.phone = document.getElementById('mi-phone').value.trim();
-      s.parentPhone = document.getElementById('mi-pphone').value.trim();
-      s.kakao = document.getElementById('mi-kakao').value.trim();
-      s.parentKakao = document.getElementById('mi-pkakao').value.trim();
+      const newName = document.getElementById('mi-name').value.trim();
+      const nn = document.getElementById('mi-nickname');
+      updates = {
+        name: newName || s.name,
+        nickname: nn ? nn.value.trim() : (s.nickname||''),
+        parentPhone: document.getElementById('mi-pphone').value.trim(),
+        kakao: document.getElementById('mi-kakao').value.trim(),
+        parentKakao: document.getElementById('mi-pkakao').value.trim(),
+      };
+      Object.assign(s, updates);   // 로컬 즉시 반영
       SESSION.name = s.name;
     }
+    if(updates && window.CLOUD && window.CLOUD.enabled){
+      try{
+        const { data, error } = await CLOUD.sb.functions.invoke('self-update', { body:{ updates } });
+        if(error || (data && data.error)){
+          alert('서버 저장 실패: ' + ((error && error.message) || (data && data.error) || '') + '\n(self-update 함수가 배포돼 있는지 확인하세요)');
+        }
+      }catch(e){ console.error('self-update failed', e); alert('서버 저장 중 오류가 발생했습니다.'); }
+    }
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }catch(e){}
   }
-  saveDB();
   // refresh session storage copy
   const store = localStorage.getItem(SESSION_KEY) ? localStorage : sessionStorage;
   store.setItem(SESSION_KEY, JSON.stringify(SESSION));
-  document.getElementById('user-name').textContent = SESSION.name;
+  const un = document.getElementById('user-name'); if(un) un.textContent = SESSION.name;
   alert('저장되었습니다.');
   renderAll();
 }
