@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- AXIS LMS · index.html · v1.4 (학생 마이페이지 본인정보 서버 저장: self-update) -->
+<!-- AXIS LMS · index.html · v1.5 (학부모 계정 생성: 학생 추가 시 자동 + 일괄 버튼) -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -524,6 +524,7 @@ tbody tr:hover{background:rgba(8,31,77,.02);}
           <span class="msym">search</span>
           <input type="text" id="student-search" placeholder="이름으로 검색...">
         </div>
+        <button class="btn btn-outline" onclick="createParentAccounts()"><span class="msym">family_restroom</span>학부모 계정</button>
         <button class="btn btn-gold" onclick="openBulkStudentModal()"><span class="msym">group_add</span>일괄 등록</button>
         <button class="btn btn-primary" onclick="openStudentModal()"><span class="msym">person_add</span>학생 추가</button>
       </div>
@@ -3451,6 +3452,38 @@ async function autoCreateAccount(role, name, phone){
   }catch(e){ console.error('autoCreateAccount', e); acctToast(`⚠️ ${name} 계정 생성 중 오류`); }
 }
 
+/* ===== 학부모 로그인 계정 생성 (학생의 학부모 전화번호 기준, 마스터 전용) ===== */
+async function createParentAccounts(){
+  if(!isAdminUser()){ alert('학부모 계정 생성은 마스터(최고관리자)만 사용할 수 있습니다.'); return; }
+  if(!(window.CLOUD && window.CLOUD.enabled)){ alert('클라우드(Supabase) 연결 상태에서만 계정을 생성할 수 있습니다.'); return; }
+  const map = {};
+  DB.students.forEach(s=>{
+    if(isValidPhone(s.parentPhone)){
+      const p = Auth.norm(s.parentPhone);
+      if(!map[p]) map[p] = (s.parentName && s.parentName.trim()) ? s.parentName : ((s.name||'')+' 학부모');
+    }
+  });
+  const targets = Object.keys(map).map(p=>({ name:map[p], login_id:p, role:'parent' }));
+  if(!targets.length){ alert('학부모 전화번호가 등록된 학생이 없습니다.\n학생 정보(또는 학생 마이페이지)에 학부모 전화번호를 먼저 입력해주세요.'); return; }
+  if(!confirm(`학부모 ${targets.length}명의 로그인 계정을 생성합니다.\n초기 비밀번호는 axis1234이며, 첫 로그인 시 변경됩니다.\n(이미 계정이 있는 학부모는 건너뜁니다.)\n\n학부모는 본인 휴대폰 번호로 로그인해 자녀 정보를 볼 수 있습니다.\n진행할까요?`)) return;
+  try{
+    const { data, error } = await CLOUD.sb.functions.invoke('create-students', { body:{ students: targets } });
+    if(error){ alert('계정 생성 함수 호출 실패: '+(error.message||error)); return; }
+    if(data && data.error){ alert(data.error); return; }
+    const results = (data && data.results) || [];
+    let ok=0, ex=0, fail=0; const failed=[];
+    results.forEach(r=>{
+      if(r.ok) ok++;
+      else if(/already|exists|registered/i.test(r.error||'')) ex++;
+      else { fail++; failed.push(`${r.name}(${r.login_id}): ${r.error||''}`); }
+    });
+    let msg = `학부모 계정 — 생성 ${ok} · 기존 ${ex} · 실패 ${fail}`;
+    if(failed.length) msg += `\n\n실패:\n`+failed.join('\n');
+    msg += `\n\n학부모께 "휴대폰 번호 + 초기비밀번호 axis1234"를 안내하세요.`;
+    alert(msg);
+  }catch(e){ console.error('parent account create failed', e); alert('계정 생성 중 오류: '+(e.message||e)); }
+}
+
 /* ===== 선생님 로그인 계정 생성 (마스터 전용) ===== */
 async function createTeacherAccounts(){
   if(!isAdminUser()){ alert('선생님 계정 생성은 마스터(최고관리자)만 사용할 수 있습니다.'); return; }
@@ -3749,6 +3782,7 @@ function saveStudent(){
   closeStudentModal();
   renderAll();
   if(!id) autoCreateAccount('student', name, phone);   // 신규 학생 → 로그인 계정 자동 생성
+  if(!id && isValidPhone(parentPhone)) autoCreateAccount('parent', name+' 학부모', parentPhone); // 학부모 계정도 자동 생성
 }
 function deleteStudent(id){
   const s = DB.students.find(x=>x.id===id);
@@ -5119,7 +5153,8 @@ function buildSessionFromProfile(prof){
     const kids = Auth.childrenOf(loginId);
     if(!kids.length) return null;
     const par = DB.parents.find(x=>Auth.norm(x.phone)===loginId);
-    return { role:'parent', name:(par&&par.name?par.name:'학부모')+' 학부모', parentPhone:loginId, childIds:kids, studentId:kids[0] };
+    const nm = (prof.name && prof.name.trim()) ? prof.name : (par&&par.name?par.name+' 학부모':'학부모');
+    return { role:'parent', name:nm, parentPhone:loginId, childIds:kids, studentId:kids[0] };
   }
   return null;
 }
