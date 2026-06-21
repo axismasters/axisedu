@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- AXIS LMS · index.html · v2.0 (비번 초기화 + 재원/휴원/퇴원 상태 + 퇴원 선생님명단 제외) -->
+<!-- AXIS LMS · index.html · v2.1 (학생 명단 재원/휴원/퇴원 상태별 필터) -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -59,6 +59,11 @@ h1,h2,h3,.serif{font-family:'Libre Caslon Text',serif;}
 .nav{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent;}
 .sidebar-brand,.user-box,.user-course,.child-switcher,.sidebar-foot{flex-shrink:0;}
 .status-sel{font-size:12px;padding:5px 8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--on-surface);vertical-align:middle;margin-right:4px;cursor:pointer;}
+.status-filter{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.status-filter .chip{font-size:13px;font-weight:600;padding:7px 14px;border-radius:999px;border:1px solid var(--outline);background:var(--surface);color:var(--on-surface-variant);cursor:pointer;transition:all .15s;}
+.status-filter .chip:hover{border-color:var(--primary);color:var(--on-surface);}
+.status-filter .chip.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+.status-filter .chip .cnt{opacity:.7;font-weight:500;margin-left:3px;}
 .nav a{
   display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;color:rgba(255,255,255,.7);
   text-decoration:none;font-size:14px;font-weight:500;cursor:pointer;border-left:3px solid transparent;
@@ -526,6 +531,8 @@ tbody tr:hover{background:rgba(8,31,77,.02);}
         <button class="btn btn-gold" onclick="openBulkStudentModal()"><span class="msym">group_add</span>일괄 등록</button>
         <button class="btn btn-primary" onclick="openStudentModal()"><span class="msym">person_add</span>학생 추가</button>
       </div>
+
+      <div id="student-filter" class="status-filter"></div>
 
       <div class="card">
         <table>
@@ -3601,11 +3608,34 @@ async function resetAccountPassword(phoneOrId, label){
     alert(`${data.name||label||lid} 계정의 비밀번호를 axis1234로 초기화했습니다.\n해당 사용자에게 "휴대폰 번호 + axis1234"로 로그인 후 변경하도록 안내하세요.`);
   }catch(e){ console.error('reset-password failed', e); alert('비밀번호 초기화 중 오류: '+(e.message||e)); }
 }
+var studentStatusFilter = '전체';
+function setStudentFilter(val){ studentStatusFilter = val; renderStudents(); }
+function renderStudentFilterChips(counts){
+  const box = document.getElementById('student-filter'); if(!box) return;
+  const items = [['전체','전체'],['재원','재원'],['휴원','휴원']];
+  if(isAdminUser()) items.push(['퇴원','퇴원']);
+  box.innerHTML = items.map(([val,label])=>{
+    const active = (studentStatusFilter===val) ? ' active' : '';
+    const n = counts[val]!=null ? counts[val] : 0;
+    return `<button class="chip${active}" onclick="setStudentFilter('${val}')">${label}<span class="cnt">${n}</span></button>`;
+  }).join('');
+}
 function renderStudents(){
   const q = (document.getElementById('student-search').value||'').trim().toLowerCase();
-  const list = managedStudents().filter(s=>s.name.toLowerCase().includes(q));
+  const base = managedStudents();
+  const counts = { 전체:base.length, 재원:0, 휴원:0, 퇴원:0 };
+  base.forEach(s=>{ const st=s.status||'재원'; if(counts[st]!=null) counts[st]++; });
+  renderStudentFilterChips(counts);
+  let list = base;
+  if(studentStatusFilter!=='전체') list = list.filter(s=>(s.status||'재원')===studentStatusFilter);
+  list = list.filter(s=>s.name.toLowerCase().includes(q));
   const body = document.getElementById('student-table-body');
-  document.getElementById('student-empty').style.display = DB.students.length ? 'none':'block';
+  const empty = document.getElementById('student-empty');
+  if(empty){
+    if(base.length===0){ empty.style.display='block'; empty.innerHTML = `<span class="msym">group_off</span>등록된 학생이 없습니다. '학생 추가'로 시작해보세요.`; }
+    else if(list.length===0){ empty.style.display='block'; empty.innerHTML = `<span class="msym">filter_alt_off</span>'${studentStatusFilter}' 상태의 학생이 없습니다.`; }
+    else { empty.style.display='none'; }
+  }
   body.innerHTML = list.map(s=>{
     const course = courseLabel(s);
     const tname = teacherName(s.teacherId);
