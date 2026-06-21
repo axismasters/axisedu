@@ -523,6 +523,7 @@ tbody tr:hover{background:rgba(8,31,77,.02);}
           <span class="msym">search</span>
           <input type="text" id="student-search" placeholder="이름으로 검색...">
         </div>
+        <button class="btn btn-gold" onclick="openBulkStudentModal()"><span class="msym">group_add</span>일괄 등록</button>
         <button class="btn btn-primary" onclick="openStudentModal()"><span class="msym">person_add</span>학생 추가</button>
       </div>
 
@@ -868,6 +869,35 @@ tbody tr:hover{background:rgba(8,31,77,.02);}
     </section>
 
   </main>
+</div>
+
+<!-- Bulk Student Modal (master only) -->
+<div class="modal-overlay" id="bulk-modal-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>학생 일괄 등록 · 계정 생성</h3>
+      <button class="modal-close" onclick="closeBulkStudentModal()"><span class="msym">close</span></button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>학생 목록 — 한 줄에 한 명: 이름, 휴대폰 (학년은 선택)</label>
+        <textarea id="bulk-input" rows="8" style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.7;" placeholder="김민준, 010-1234-5678, 중3&#10;박서연, 010-2345-6789, 중2&#10;이도윤, 010-3456-7890"></textarea>
+        <p style="font-size:12px;color:#5a5d63;margin:8px 0 0;">
+          · 학생들은 입력한 <b>휴대폰 번호</b>로 로그인합니다. 초기 비밀번호는 모두 <b>axis1234</b>이며, 첫 로그인 시 변경이 강제됩니다.<br>
+          · 등록과 동시에 로그인 계정이 자동 생성됩니다. 이미 등록된 번호는 건너뜁니다.
+        </p>
+      </div>
+      <div class="field">
+        <label>담당 선생님 (선택 · 전체 적용)</label>
+        <select id="bulk-teacher"></select>
+      </div>
+      <div id="bulk-result" style="display:none;background:#0b1020;color:#d6e0f5;border-radius:10px;padding:12px 14px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.7;max-height:220px;overflow:auto;white-space:pre-wrap;margin-top:4px;"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeBulkStudentModal()">닫기</button>
+      <button class="btn btn-primary" id="bulk-submit-btn" onclick="submitBulkStudents()">등록하고 계정 생성</button>
+    </div>
+  </div>
 </div>
 
 <!-- Student Modal -->
@@ -3512,6 +3542,91 @@ function openStudentModal(id){
   document.getElementById('student-modal-overlay').classList.add('active');
 }
 function closeStudentModal(){ document.getElementById('student-modal-overlay').classList.remove('active'); }
+
+/* ===== 학생 일괄 등록 + Supabase 계정 자동 생성 (마스터 전용) ===== */
+function openBulkStudentModal(){
+  if(!isAdminUser()){ alert('학생 일괄 등록·계정 생성은 마스터(최고관리자)만 사용할 수 있습니다.'); return; }
+  if(!(window.CLOUD && window.CLOUD.enabled)){ alert('클라우드(Supabase) 연결 상태에서만 계정을 생성할 수 있습니다.'); return; }
+  document.getElementById('bulk-input').value='';
+  const tsel = document.getElementById('bulk-teacher');
+  if(tsel) tsel.innerHTML = `<option value="">미지정</option>` + DB.teachers.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  const res = document.getElementById('bulk-result'); res.style.display='none'; res.textContent='';
+  const btn = document.getElementById('bulk-submit-btn'); btn.disabled=false; btn.textContent='등록하고 계정 생성';
+  document.getElementById('bulk-modal-overlay').classList.add('active');
+}
+function closeBulkStudentModal(){ document.getElementById('bulk-modal-overlay').classList.remove('active'); }
+
+function parseBulkLines(text){
+  const rows=[], errs=[];
+  (text||'').split(/\r?\n/).forEach((line,i)=>{
+    const raw=line.trim(); if(!raw) return;
+    const p = raw.split(/[,\t]/).map(s=>s.trim());
+    const name=p[0]||'', phone=p[1]||'', grade=p[2]||'';
+    if(!name){ errs.push(`${i+1}행: 이름 없음`); return; }
+    if(!isValidPhone(phone)){ errs.push(`${i+1}행: 휴대폰 형식 오류 (${phone||'빈칸'})`); return; }
+    rows.push({ name, phone: Auth.norm(phone), grade });
+  });
+  return { rows, errs };
+}
+
+async function submitBulkStudents(){
+  if(!isAdminUser()){ alert('마스터만 사용할 수 있습니다.'); return; }
+  const res = document.getElementById('bulk-result');
+  const btn = document.getElementById('bulk-submit-btn');
+  const { rows, errs } = parseBulkLines(document.getElementById('bulk-input').value);
+  res.style.display='block';
+  if(errs.length){ res.textContent = '입력 오류:\n' + errs.join('\n') + '\n\n위 줄을 고치고 다시 시도하세요.'; return; }
+  if(!rows.length){ res.textContent='등록할 학생이 없습니다.'; return; }
+
+  // 배치 내 중복 휴대폰 제거
+  const seen=new Set(), uniq=[];
+  rows.forEach(r=>{ if(!seen.has(r.phone)){ seen.add(r.phone); uniq.push(r); } });
+
+  const teacherId = (document.getElementById('bulk-teacher')||{}).value || '';
+  btn.disabled=true; btn.textContent='처리 중…';
+  let added=0, skipped=0; const toCreate=[];
+  uniq.forEach(r=>{
+    const exists = DB.students.find(s=>Auth.norm(s.phone)===r.phone);
+    if(!exists){
+      DB.students.push({
+        id: uid(), name:r.name, grade:r.grade||'중1', cls:'', phone:r.phone,
+        parentPhone:'', kakao:'', parentKakao:'', teacherId, courseTrack:'', courseLevel:'',
+        courseSubjects:[], note:'', nickname:'', naesin:[], mock:[],
+        createdAt:new Date().toISOString().slice(0,10)
+      });
+      added++;
+    } else skipped++;
+    toCreate.push({ name:r.name, login_id:r.phone });
+  });
+  saveDB(); renderAll();
+
+  res.textContent = `학생 레코드: ${added}명 추가${skipped?`, ${skipped}명 기존(건너뜀)`:''}\n로그인 계정 생성 중…`;
+  try{
+    const { data, error } = await CLOUD.sb.functions.invoke('create-students', { body:{ students: toCreate } });
+    if(error){
+      res.textContent += `\n\n⚠️ 계정 생성 함수 호출 실패: ${error.message||error}\n('create-students' Edge Function이 배포되어 있는지 확인하세요.)`;
+      btn.disabled=false; btn.textContent='다시 시도'; return;
+    }
+    if(data && data.error){
+      res.textContent += `\n\n⚠️ ${data.error}`;
+      btn.disabled=false; btn.textContent='다시 시도'; return;
+    }
+    const results = (data && data.results) || [];
+    let ok=0, ex=0, fail=0; const lines=[];
+    results.forEach(r=>{
+      if(r.ok){ ok++; lines.push(`✓ ${r.name} (${r.login_id})`); }
+      else if(/already|exists|registered/i.test(r.error||'')){ ex++; lines.push(`• ${r.name} (${r.login_id}) 이미 계정 있음`); }
+      else { fail++; lines.push(`✗ ${r.name} (${r.login_id}) ${r.error||''}`); }
+    });
+    res.textContent = `학생 ${added}명 추가${skipped?`, ${skipped}명 기존`:''}\n계정: 생성 ${ok} · 기존 ${ex} · 실패 ${fail}\n\n`
+      + lines.join('\n')
+      + `\n\n학생에게 "휴대폰 번호 + 초기비밀번호 axis1234"를 안내하세요. 첫 로그인 시 비밀번호를 변경합니다.`;
+  }catch(e){
+    console.error('bulk create failed', e);
+    res.textContent += `\n\n⚠️ 계정 생성 중 오류: ${e.message||e}`;
+  }
+  btn.disabled=false; btn.textContent='완료 (다시 등록)';
+}
 
 function saveStudent(){
   const name = document.getElementById('student-name').value.trim();
