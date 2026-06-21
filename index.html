@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- AXIS LMS · index.html · v1.5 (학부모 계정 생성: 학생 추가 시 자동 + 일괄 버튼) -->
+<!-- AXIS LMS · index.html · v1.9 (사이드바 메뉴 스크롤: 로그아웃 항상 보이게) -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -53,7 +53,10 @@ h1,h2,h3,.serif{font-family:'Libre Caslon Text',serif;}
 .sidebar-brand .sidebar-logo{width:100%;max-width:150px;height:auto;display:block;margin-bottom:10px;}
 .sidebar-brand .title{font-family:'Libre Caslon Text',serif;color:var(--secondary-fixed);font-size:22px;line-height:1.2;}
 .sidebar-brand .sub{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-top:6px;}
-.nav{display:flex;flex-direction:column;gap:2px;padding:0 12px;flex:1;}
+.nav{display:flex;flex-direction:column;gap:2px;padding:0 12px;flex:1;overflow-y:auto;min-height:0;}
+.nav::-webkit-scrollbar{width:6px;}
+.nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px;}
+.nav{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent;}
 .nav a{
   display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;color:rgba(255,255,255,.7);
   text-decoration:none;font-size:14px;font-weight:500;cursor:pointer;border-left:3px solid transparent;
@@ -363,13 +366,6 @@ tbody tr:hover{background:rgba(8,31,77,.02);}
       <div class="login-logo">
         <div class="logo-frame"><img id="login-logo-img" alt="AXIS Math Academy"></div>
         <div class="rule"></div>
-      </div>
-
-      <div class="role-tabs">
-        <button type="button" id="role-master" onclick="setLoginRole('master')">최고관리자</button>
-        <button type="button" id="role-teacher" class="active" onclick="setLoginRole('teacher')">선생님</button>
-        <button type="button" id="role-student" onclick="setLoginRole('student')">학생</button>
-        <button type="button" id="role-parent" onclick="setLoginRole('parent')">학부모</button>
       </div>
 
       <form id="login-form" onsubmit="event.preventDefault();doLogin();">
@@ -4352,9 +4348,20 @@ function growthHooks(){
 }
 
 /* ---- 행동 발생(데모 버튼 + 실제 연동 진입점) ---- */
+var DAILY_ACTIONS = { attendance:'출석', homework:'숙제 완료', questions:'문제 풀이', lecture:'강의 시청' };
 function growthAction(type, payload){
   const sid = growthStudentId(); if(!sid) return;
   const d = getAchievement(sid);
+  // 자기보고 행동은 하루 1회만 (무제한 클릭 방지)
+  if(DAILY_ACTIONS[type]){
+    const today = new Date().toISOString().slice(0,10);
+    if(!d.lastDaily) d.lastDaily = {};
+    if(d.lastDaily[type] === today){
+      try{ gwToast('', `오늘은 이미 '${DAILY_ACTIONS[type]}'을(를) 완료했어요. 내일 또 도전하세요!`, ''); }catch(e){}
+      return;
+    }
+    d.lastDaily[type] = today;
+  }
   GW.recordEvent(d, type, payload||{}, growthHooks());
   saveDB(); renderMyGrowth();
 }
@@ -4475,20 +4482,17 @@ function renderMyGrowth(){
       <div class="gw-statline"><span>복수 성공</span><span class="v">${d.revengeSuccess}회</span></div>
     </div>
 
+    ${SESSION.role==='student' ? `
     <div class="gw-card">
-      <h3><span class="msym">science</span>행동 시뮬레이션 (데모)</h3>
-      <p style="font-size:12px;color:var(--on-surface-variant);margin:0 0 10px">행동이 발생하면 Achievement Engine이 업적·EXP·레벨·칭호를 자동 갱신합니다.</p>
+      <h3><span class="msym">task_alt</span>오늘의 활동</h3>
+      <p style="font-size:12px;color:var(--on-surface-variant);margin:0 0 10px">매일 학습 활동을 기록하면 EXP·레벨·업적이 올라갑니다. 각 항목은 <b>하루 1회</b>만 가능합니다.</p>
       <div class="gw-acts">
         <button class="btn btn-outline" onclick="growthAction('attendance')">출석</button>
         <button class="btn btn-outline" onclick="growthAction('homework',{perfect:true})">숙제 완료</button>
-        <button class="btn btn-outline" onclick="growthAction('questions',{count:30})">문제 30개</button>
+        <button class="btn btn-outline" onclick="growthAction('questions',{count:30})">문제 풀이 (30문제)</button>
         <button class="btn btn-outline" onclick="growthAction('lecture')">강의 시청</button>
-        <button class="btn btn-outline" onclick="growthAction('exam',{score:100,max:100,prev:88})">시험 만점</button>
-        <button class="btn btn-outline" onclick="growthAction('rivalWin')">라이벌 승리</button>
-        <button class="btn btn-primary" onclick="growthAction('revenge')">복수 성공</button>
-        <button class="btn btn-outline" onclick="syncAchievementFromData(growthStudentId())">성적 데이터 동기화</button>
       </div>
-    </div>
+    </div>` : ''}
   </div>`;
 }
 function gwOpenEmblem(id){
@@ -4653,19 +4657,10 @@ const ROLE_META = {
 };
 
 function setLoginRole(role){
-  loginRole = role;
-  ['master','teacher','student','parent'].forEach(r=>{
-    const el = document.getElementById('role-'+r);
-    if(el) el.classList.toggle('active', role===r);
-  });
-  const meta = ROLE_META[role] || ROLE_META.teacher;
-  document.getElementById('login-id-label').textContent = meta.idLabel;
-  document.getElementById('login-id').placeholder = meta.ph;
-  document.getElementById('login-id').setAttribute('inputmode', meta.master ? 'text' : 'tel');
-  document.getElementById('login-id-icon').textContent = meta.icon;
-  document.getElementById('login-id').value = '';
-  document.getElementById('login-pw').value = '';
-  document.getElementById('login-error').style.display='none';
+  loginRole = role || 'auto';
+  const idEl = document.getElementById('login-id'); if(idEl) idEl.value = '';
+  const pwEl = document.getElementById('login-pw'); if(pwEl) pwEl.value = '';
+  const er = document.getElementById('login-error'); if(er) er.style.display='none';
   hideForceChange();
   updateLoginHint();
 }
@@ -4673,18 +4668,7 @@ function setLoginRole(role){
 function updateLoginHint(){
   const hint = document.getElementById('login-hint');
   if(!hint) return;
-  if(loginRole==='master'){
-    hint.innerHTML = `<b>최고관리자</b> · 아이디 <b>AxMaster</b> · 초기 비밀번호 <b>axis1234</b><br>첫 로그인 후 비밀번호를 반드시 변경합니다.`;
-  } else if(loginRole==='teacher'){
-    const t0 = DB.teachers[0];
-    hint.innerHTML = `<b>선생님</b> · 등록된 <b>휴대폰 번호</b>로 로그인 · 초기 비밀번호 <b>axis1234</b>${t0&&t0.phone?`<br>예: ${t0.phone}`:''}`;
-  } else if(loginRole==='student'){
-    const s0 = DB.students[0];
-    hint.innerHTML = `<b>학생</b> · 본인 <b>휴대폰 번호</b>로 로그인 · 초기 비밀번호 <b>axis1234</b>${s0&&s0.phone?`<br>예: ${s0.phone} (${s0.name}, 학번 ${s0.studentNo||'-'})`:''}`;
-  } else {
-    const s0 = DB.students[0];
-    hint.innerHTML = `<b>학부모</b> · 등록된 <b>휴대폰 번호</b>로 로그인 · 초기 비밀번호 <b>axis1234</b>${s0&&s0.parentPhone?`<br>예: ${s0.parentPhone}`:''}<br>한 번호로 여러 자녀를 관리할 수 있습니다.`;
-  }
+  hint.innerHTML = `휴대폰 번호와 비밀번호로 로그인하세요.<br>처음 로그인하면 초기 비밀번호를 반드시 새 비밀번호로 변경해야 합니다.`;
 }
 
 /**
@@ -4863,6 +4847,9 @@ function enterApp(){
   // homer grading is student-only
   const homerNav = document.querySelector('#nav-student a[data-view="my-homer"]');
   if(homerNav) homerNav.style.display = (SESSION.role==='parent') ? 'none' : '';
+  // 라이벌은 학부모에게 숨김 (학생만 표시)
+  const rivalNav = document.querySelector('#nav-student a[data-view="my-rival"]');
+  if(rivalNav) rivalNav.style.display = (SESSION.role==='parent') ? 'none' : '';
 
   // user box
   document.getElementById('user-avatar').textContent = SESSION.name.slice(0,1);
@@ -5176,11 +5163,12 @@ async function doLoginCloud(){
   errEl.style.display='none';
 
   let loginId;
-  if(loginRole==='master'){
-    loginId = (idRaw==='' || idRaw.toLowerCase()==='axmaster') ? 'axmaster' : (Auth.norm(idRaw)||'axmaster');
+  const digits = Auth.norm(idRaw);
+  if(digits.length>=9){
+    loginId = digits;                          // 휴대폰 번호 → 역할은 로그인 후 프로필로 자동 판별
   } else {
-    loginId = Auth.norm(idRaw);
-    if(loginId.length<8){ errEl.textContent='휴대폰 번호를 다시 확인해주세요.'; errEl.style.display='block'; return; }
+    loginId = idRaw.toLowerCase();             // 관리자 아이디(AxMaster 등)
+    if(!loginId){ errEl.textContent='휴대폰 번호 또는 관리자 아이디를 입력하세요.'; errEl.style.display='block'; return; }
   }
   if(!pw){ errEl.textContent='비밀번호를 입력해주세요.'; errEl.style.display='block'; return; }
 
