@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- AXIS LMS · index.html · v1.1 (학생 추가 버튼 수정: populateTeacherSelect 추가) -->
+<!-- AXIS LMS · index.html · v1.2 (선생님 계정 생성 기능 추가) -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -551,7 +551,10 @@ tbody tr:hover{background:rgba(8,31,77,.02);}
       </div>
       <div class="toolbar">
         <div></div>
-        <button class="btn btn-primary" onclick="openTeacherModal()"><span class="msym">person_add</span>선생님 추가</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-gold" onclick="createTeacherAccounts()"><span class="msym">badge</span>계정 생성</button>
+          <button class="btn btn-primary" onclick="openTeacherModal()"><span class="msym">person_add</span>선생님 추가</button>
+        </div>
       </div>
       <div class="card">
         <table>
@@ -3414,6 +3417,33 @@ function renderTeachers(){
     </tr>`;
   }).join('');
 }
+/* ===== 선생님 로그인 계정 생성 (마스터 전용) ===== */
+async function createTeacherAccounts(){
+  if(!isAdminUser()){ alert('선생님 계정 생성은 마스터(최고관리자)만 사용할 수 있습니다.'); return; }
+  if(!(window.CLOUD && window.CLOUD.enabled)){ alert('클라우드(Supabase) 연결 상태에서만 계정을 생성할 수 있습니다.'); return; }
+  const targets = DB.teachers.filter(t=>isValidPhone(t.phone)).map(t=>({ name:t.name, login_id:Auth.norm(t.phone), role:'teacher' }));
+  const noPhone = DB.teachers.filter(t=>!isValidPhone(t.phone));
+  if(!targets.length){ alert('휴대폰 번호가 등록된 선생님이 없습니다. 먼저 선생님의 휴대폰 번호를 입력해주세요.'); return; }
+  if(!confirm(`휴대폰이 등록된 선생님 ${targets.length}명의 로그인 계정을 생성합니다.\n초기 비밀번호는 axis1234이며, 첫 로그인 시 변경됩니다.\n(이미 계정이 있는 선생님은 건너뜁니다.)\n\n진행할까요?`)) return;
+  try{
+    const { data, error } = await CLOUD.sb.functions.invoke('create-students', { body:{ students: targets } });
+    if(error){ alert('계정 생성 함수 호출 실패: '+(error.message||error)+'\n\ncreate-students 함수가 최신 코드로 배포돼 있는지 확인하세요.'); return; }
+    if(data && data.error){ alert(data.error); return; }
+    const results = (data && data.results) || [];
+    let ok=0, ex=0, fail=0; const failed=[];
+    results.forEach(r=>{
+      if(r.ok) ok++;
+      else if(/already|exists|registered/i.test(r.error||'')) ex++;
+      else { fail++; failed.push(`${r.name}(${r.login_id}): ${r.error||''}`); }
+    });
+    let msg = `선생님 계정 — 생성 ${ok} · 기존 ${ex} · 실패 ${fail}`;
+    if(noPhone.length) msg += `\n\n(휴대폰 미입력으로 제외: ${noPhone.map(t=>t.name).join(', ')})`;
+    if(failed.length) msg += `\n\n실패:\n`+failed.join('\n');
+    msg += `\n\n선생님께 "휴대폰 번호 + 초기비밀번호 axis1234"를 안내하세요.`;
+    alert(msg);
+  }catch(e){ console.error('teacher account create failed', e); alert('계정 생성 중 오류: '+(e.message||e)); }
+}
+
 function openTeacherModal(id){
   document.getElementById('teacher-modal-title').textContent = id ? '선생님 정보 수정' : '선생님 추가';
   document.getElementById('teacher-id').value = id||'';
