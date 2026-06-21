@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- AXIS LMS · index.html · v2.1 (학생 명단 재원/휴원/퇴원 상태별 필터) -->
+<!-- AXIS LMS · index.html · v2.4 (공지·숙제·일정 기능 + 오늘 중심 대시보드) -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -490,8 +490,10 @@ tbody tr:hover{background:rgba(8,31,77,.02);}
       <div class="page-head">
         <p class="eyebrow">Overview</p>
         <h1>대시보드</h1>
-        <p>전체 학생과 시험 현황을 한눈에 확인하세요.</p>
+        <p>오늘 해야 할 일을 먼저 확인하고, 전체 현황을 점검하세요.</p>
       </div>
+
+      <div id="dash-today" class="dash-today"></div>
 
       <div class="grid grid-4" id="dash-stats"></div>
 
@@ -1133,6 +1135,51 @@ tbody tr:hover{background:rgba(8,31,77,.02);}
   </div>
 </div>
 
+<!-- Notice Modal -->
+<div class="modal-overlay" id="notice-modal-overlay">
+  <div class="modal">
+    <div class="modal-head"><h3>공지 등록</h3><button class="modal-close" onclick="closeNoticeModal()"><span class="msym">close</span></button></div>
+    <div class="modal-body">
+      <div class="field"><label>제목 *</label><input type="text" id="notice-title" placeholder="예: 6월 모의고사 일정 안내"></div>
+      <div class="field"><label>내용</label><textarea id="notice-body" rows="3" placeholder="공지 내용을 입력하세요."></textarea></div>
+      <div class="field"><label>공개 대상</label><select id="notice-scope">
+        <option value="all">전체</option><option value="student">학생</option><option value="parent">학부모</option><option value="teacher">선생님</option>
+      </select></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" onclick="closeNoticeModal()">취소</button><button class="btn btn-primary" onclick="saveNotice()">저장</button></div>
+  </div>
+</div>
+
+<!-- Homework Modal -->
+<div class="modal-overlay" id="homework-modal-overlay">
+  <div class="modal">
+    <div class="modal-head"><h3>숙제 등록</h3><button class="modal-close" onclick="closeHomeworkModal()"><span class="msym">close</span></button></div>
+    <div class="modal-body">
+      <div class="field"><label>제목 *</label><input type="text" id="hw-title" placeholder="예: 미적분 p.45~52"></div>
+      <div class="field"><label>과목</label><input type="text" id="hw-subject" placeholder="예: 수학"></div>
+      <div class="field"><label>마감일</label><input type="date" id="hw-due"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" onclick="closeHomeworkModal()">취소</button><button class="btn btn-primary" onclick="saveHomework()">저장</button></div>
+  </div>
+</div>
+
+<!-- Schedule Modal -->
+<div class="modal-overlay" id="schedule-modal-overlay">
+  <div class="modal">
+    <div class="modal-head"><h3>일정 등록</h3><button class="modal-close" onclick="closeScheduleModal()"><span class="msym">close</span></button></div>
+    <div class="modal-body">
+      <div class="field"><label>종류</label><select id="sch-type"><option value="수업">수업</option><option value="상담">상담</option></select></div>
+      <div class="field"><label>제목 *</label><input type="text" id="sch-title" placeholder="예: 고2 정규수업 / OO 학부모 상담"></div>
+      <div class="grid grid-2" style="gap:12px;">
+        <div class="field"><label>날짜 *</label><input type="date" id="sch-date"></div>
+        <div class="field"><label>시간</label><input type="time" id="sch-time"></div>
+      </div>
+      <div class="field"><label>관련 학생 (선택)</label><select id="sch-student"></select></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" onclick="closeScheduleModal()">취소</button><button class="btn btn-primary" onclick="saveSchedule()">저장</button></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="exam-modal-overlay">
   <div class="modal">
     <div class="modal-head">
@@ -1251,7 +1298,71 @@ tbody tr:hover{background:rgba(8,31,77,.02);}
 #gw-levelup .box{text-align:center;color:#fff;animation:gwPop .5s cubic-bezier(.2,.9,.2,1.2);}
 #gw-levelup .big{font-size:64px;font-weight:800;background:linear-gradient(180deg,#fff,#eac076);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
 @keyframes gwPop{from{transform:scale(.7);opacity:0}to{transform:none;opacity:1}}
+/* ===== Dashboard Today 섹션 ===== */
+.dash-today{margin-bottom:28px;}
+.ai-alert{background:linear-gradient(135deg,#0a1c44,#000926);color:#e9eefb;padding:16px 20px;margin-bottom:16px;border:none;}
+.ai-alert .ai-h{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;letter-spacing:.05em;color:#eac076;margin-bottom:6px;}
+.ai-alert .ai-h .msym{font-size:17px;}
+.ai-alert .ai-b{font-size:14px;line-height:1.55;}
+.ai-alert .ai-b b{color:#eac076;}
+.today-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+@media(max-width:1100px){.today-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:680px){.today-grid{grid-template-columns:1fr;}}
+.today-card{padding:0;overflow:hidden;display:flex;flex-direction:column;}
+.today-card .today-h{display:flex;align-items:center;gap:8px;padding:13px 16px;border-bottom:1px solid var(--surface-high);font-weight:700;font-size:14px;}
+.today-card .today-h .msym{font-size:18px;color:var(--secondary);}
+.today-card .today-h .tt{flex:1;}
+.today-card .today-add{padding:4px 10px;font-size:12px;}
+.today-card .today-c{padding:8px 16px 14px;flex:1;min-height:70px;}
+.today-item{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--surface-high);font-size:13.5px;line-height:1.45;}
+.today-item:last-child{border-bottom:none;}
+.today-item .helper{font-size:11.5px;color:var(--on-surface-variant);}
+.today-empty{padding:16px 4px;text-align:center;color:var(--on-surface-variant);font-size:13px;}
+.lk-del{background:none;border:none;color:var(--on-surface-variant);cursor:pointer;padding:2px;border-radius:6px;flex-shrink:0;}
+.lk-del:hover{background:var(--surface-high);color:var(--danger,#c0392b);}
+.lk-del .msym{font-size:16px;}
+.dday-card{display:flex;align-items:center;gap:8px;margin-top:14px;background:linear-gradient(135deg,#000926,#0a1c44);color:#fff;padding:13px 18px;font-size:14px;border:none;}
+.dday-card .msym{color:#eac076;}
+.dday-card .helper{color:rgba(255,255,255,.6);}
+/* ===== Student Drawer (학생 상세 우측 패널) ===== */
+.sd-overlay{position:fixed;inset:0;background:rgba(8,15,30,.45);opacity:0;visibility:hidden;transition:opacity .25s;z-index:200;}
+.sd-overlay.active{opacity:1;visibility:visible;}
+.sd-drawer{position:fixed;top:0;right:0;height:100vh;width:430px;max-width:92vw;background:var(--surface);
+  box-shadow:-10px 0 40px -10px rgba(0,9,38,.35);transform:translateX(102%);transition:transform .3s cubic-bezier(.4,0,.2,1);
+  z-index:201;display:flex;flex-direction:column;overflow:hidden;}
+.sd-drawer.active{transform:translateX(0);}
+.sd-head{background:linear-gradient(135deg,#000926,#0a1c44);color:#fff;padding:22px 22px 20px;display:flex;gap:16px;align-items:center;flex-shrink:0;position:relative;}
+.sd-close{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.12);border:none;color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.sd-close:hover{background:rgba(255,255,255,.22);}
+.sd-ava{width:62px;height:62px;border-radius:50%;background:var(--secondary-fixed);color:#000926;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;font-family:'Libre Caslon Text',serif;flex-shrink:0;}
+.sd-htxt{min-width:0;}
+.sd-htxt .nm{font-size:20px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.sd-htxt .sub{font-size:12.5px;color:rgba(255,255,255,.72);margin-top:5px;}
+.sd-body{flex:1;overflow-y:auto;padding:18px 20px 26px;}
+.sd-sec{margin-bottom:18px;}
+.sd-sec h4{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--on-surface-variant);margin:0 0 8px;display:flex;align-items:center;gap:6px;}
+.sd-sec h4 .msym{font-size:15px;}
+.sd-card{background:var(--surface-low);border:1px solid var(--surface-high);border-radius:12px;padding:11px 15px;}
+.sd-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;font-size:13.5px;border-bottom:1px solid var(--surface-high);}
+.sd-row:last-child{border-bottom:none;}
+.sd-row .k{color:var(--on-surface-variant);}
+.sd-row .v{font-weight:600;text-align:right;}
+.sd-ai{background:linear-gradient(135deg,#0a1c44,#000926);color:#e9eefb;border-radius:12px;padding:14px 16px;font-size:13.5px;line-height:1.65;}
+.sd-ai b{color:#eac076;}
+.sd-ai .badge-ai{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#eac076;margin-bottom:8px;letter-spacing:.05em;}
+.sd-foot{flex-shrink:0;border-top:1px solid var(--surface-high);padding:14px 18px;display:flex;justify-content:flex-end;gap:10px;background:var(--surface);}
+.sd-actlog{font-size:12.5px;color:var(--on-surface-variant);line-height:1.5;}
+.sd-actlog div{padding:6px 0;border-bottom:1px dashed var(--surface-high);}
+.sd-actlog div:last-child{border-bottom:none;}
+.sd-name-link{cursor:pointer;}
+.sd-name-link:hover{color:var(--secondary);text-decoration:underline;}
 </style>
+<div class="sd-overlay" id="sd-overlay" onclick="closeStudentDrawer()"></div>
+<aside class="sd-drawer" id="sd-drawer" aria-hidden="true">
+  <div class="sd-head" id="sd-head"></div>
+  <div class="sd-body" id="sd-body"></div>
+  <div class="sd-foot" id="sd-foot"></div>
+</aside>
 <script>
 /* ===== embedded: achievement-engine.js (canonical file shipped separately) ===== */
 /* ============================================================================
@@ -1892,6 +2003,9 @@ function loadDB(){
   if(!DB.auth) DB.auth = {};                  // { master, creds }  (로그인 자격증명)
   if(!Array.isArray(DB.parents)) DB.parents = [];             // 학부모 계정 (휴대폰 dedupe)
   if(!Array.isArray(DB.guardianLinks)) DB.guardianLinks = []; // 보호자-학생 M:N 연결
+  if(!Array.isArray(DB.notices)) DB.notices = [];     // 공지 {id,title,body,scope,createdAt}
+  if(!Array.isArray(DB.homeworks)) DB.homeworks = []; // 숙제 {id,title,subject,dueDate,teacherId,createdAt,done:{sid:true}}
+  if(!Array.isArray(DB.schedules)) DB.schedules = []; // 일정 {id,type('수업'|'상담'),title,date,time,studentId,teacherId,createdAt}
 }
 function saveDB(){
   try{ if(typeof Auth!=='undefined') Auth.sync(); }catch(e){ console.error('auth sync failed', e); }
@@ -1955,6 +2069,11 @@ function chartEmpty(canvas, msg){
   c.fillText(msg, w/2, h/2); c.restore();
 }
 function uid(){ return 'id_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+
+/** 공통 조회 헬퍼 (없으면 null) — 곳곳의 중복 find 패턴 대체용 */
+function findStudent(id){ return (DB.students||[]).find(s=>s&&s.id===id) || null; }
+function findExam(id){ return (DB.exams||[]).find(e=>e&&e.id===id) || null; }
+function findTeacher(id){ return (DB.teachers||[]).find(t=>t&&t.id===id) || null; }
 
 /* ---------- seed sample data (only if empty) ---------- */
 function seedIfEmpty(){
@@ -2054,11 +2173,12 @@ function seedIfEmpty(){
 document.querySelectorAll('.nav a').forEach(a=>{
   a.addEventListener('click', ()=>{
     const navParent = a.closest('.nav');
-    navParent.querySelectorAll('a').forEach(x=>x.classList.remove('active'));
+    if(navParent) navParent.querySelectorAll('a').forEach(x=>x.classList.remove('active'));
     a.classList.add('active');
     const view = a.dataset.view;
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-    document.getElementById('view-'+view).classList.add('active');
+    const viewEl = document.getElementById('view-'+view);
+    if(viewEl) viewEl.classList.add('active');
     renderAll();
     // charts need a visible container to size correctly
     if(view==='stats'){ renderStatsCharts(); }
@@ -2131,7 +2251,142 @@ function examRanks(examId){
 function fmt(n){ return (n===null||n===undefined||isNaN(n)) ? '-' : Math.round(n*10)/10; }
 
 /* ---------- render: dashboard ---------- */
+/* ===== 공지 / 숙제 / 일정 (운영 데이터) ===== */
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+
+function activeNotices(scope){
+  const list = (DB.notices||[]).slice().sort((a,b)=>((a.createdAt||'')<(b.createdAt||'')?1:-1));
+  if(!scope || scope==='all') return list;
+  return list.filter(n=> !n.scope || n.scope==='all' || n.scope===scope);
+}
+function openNoticeModal(){ if(!isStaff()){alert('공지는 선생님/마스터만 등록할 수 있습니다.');return;}
+  document.getElementById('notice-title').value='';
+  document.getElementById('notice-body').value='';
+  document.getElementById('notice-scope').value='all';
+  document.getElementById('notice-modal-overlay').classList.add('active');
+}
+function closeNoticeModal(){ const m=document.getElementById('notice-modal-overlay'); if(m) m.classList.remove('active'); }
+function saveNotice(){
+  const title=document.getElementById('notice-title').value.trim();
+  if(!title){ alert('공지 제목을 입력해주세요.'); return; }
+  DB.notices.unshift({id:uid(), title, body:document.getElementById('notice-body').value.trim(),
+    scope:document.getElementById('notice-scope').value||'all', createdAt:nowISO()});
+  saveDB(); closeNoticeModal(); renderAll();
+}
+function deleteNotice(id){ if(!confirm('이 공지를 삭제하시겠습니까?')) return;
+  DB.notices=(DB.notices||[]).filter(n=>n.id!==id); saveDB(); renderAll(); }
+
+function dueHomeworks(){ const t=todayStr();
+  return (DB.homeworks||[]).filter(h=> !h.dueDate || h.dueDate>=t).sort((a,b)=>((a.dueDate||'')>(b.dueDate||'')?1:-1)); }
+function homeworkStats(h){ const targets=managedStudents(); return {total:targets.length, done:targets.filter(s=> h.done && h.done[s.id]).length}; }
+function openHomeworkModal(){ if(!isStaff()){alert('숙제는 선생님/마스터만 등록할 수 있습니다.');return;}
+  document.getElementById('hw-title').value='';
+  document.getElementById('hw-subject').value='';
+  document.getElementById('hw-due').value=todayStr();
+  document.getElementById('homework-modal-overlay').classList.add('active');
+}
+function closeHomeworkModal(){ const m=document.getElementById('homework-modal-overlay'); if(m) m.classList.remove('active'); }
+function saveHomework(){
+  const title=document.getElementById('hw-title').value.trim();
+  if(!title){ alert('숙제 제목을 입력해주세요.'); return; }
+  const due=document.getElementById('hw-due').value;
+  if(due && isNaN(new Date(due).getTime())){ alert('마감일이 올바르지 않습니다.'); return; }
+  DB.homeworks.unshift({id:uid(), title, subject:document.getElementById('hw-subject').value.trim(),
+    dueDate:due, teacherId:(SESSION&&SESSION.teacherId)||'', createdAt:nowISO(), done:{}});
+  saveDB(); closeHomeworkModal(); renderAll();
+}
+function deleteHomework(id){ if(!confirm('이 숙제를 삭제하시겠습니까?')) return;
+  DB.homeworks=(DB.homeworks||[]).filter(h=>h.id!==id); saveDB(); renderAll(); }
+function toggleHomeworkDone(hid, sid){ const h=(DB.homeworks||[]).find(x=>x.id===hid); if(!h) return;
+  if(!h.done) h.done={}; if(h.done[sid]) delete h.done[sid]; else h.done[sid]=true; saveDB(); renderAll(); }
+
+function todaySchedules(type){ const t=todayStr();
+  return (DB.schedules||[]).filter(s=> s.date===t && (!type||s.type===type)).sort((a,b)=>((a.time||'')>(b.time||'')?1:-1)); }
+function openScheduleModal(type){ if(!isStaff()){alert('일정은 선생님/마스터만 등록할 수 있습니다.');return;}
+  document.getElementById('sch-type').value=type||'수업';
+  document.getElementById('sch-title').value='';
+  document.getElementById('sch-date').value=todayStr();
+  document.getElementById('sch-time').value='';
+  const ssel=document.getElementById('sch-student');
+  if(ssel) ssel.innerHTML='<option value="">(개별 학생 선택 안 함)</option>'+managedStudents().map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  document.getElementById('schedule-modal-overlay').classList.add('active');
+}
+function closeScheduleModal(){ const m=document.getElementById('schedule-modal-overlay'); if(m) m.classList.remove('active'); }
+function saveSchedule(){
+  const title=document.getElementById('sch-title').value.trim();
+  if(!title){ alert('일정 제목을 입력해주세요.'); return; }
+  const date=document.getElementById('sch-date').value;
+  if(!date){ alert('날짜를 선택해주세요.'); return; }
+  const ssel=document.getElementById('sch-student');
+  DB.schedules.unshift({id:uid(), type:document.getElementById('sch-type').value||'수업', title, date,
+    time:document.getElementById('sch-time').value, studentId:ssel?ssel.value:'',
+    teacherId:(SESSION&&SESSION.teacherId)||'', createdAt:nowISO()});
+  saveDB(); closeScheduleModal(); renderAll();
+}
+function deleteSchedule(id){ if(!confirm('이 일정을 삭제하시겠습니까?')) return;
+  DB.schedules=(DB.schedules||[]).filter(s=>s.id!==id); saveDB(); renderAll(); }
+
+function nextExamDDay(){ const t=todayStr();
+  const up=(DB.exams||[]).filter(e=>e.date && e.date>=t).sort((a,b)=>(a.date>b.date?1:-1))[0];
+  if(!up) return null;
+  const d=Math.round((new Date(up.date+'T00:00:00')-new Date(t+'T00:00:00'))/86400000);
+  return { name:up.name, date:up.date, dday:d };
+}
+function decliningStudents(){ const out=[];
+  managedStudents().forEach(s=>{
+    const totals=(DB.exams||[]).map(e=>({d:e.date,sc:studentTotal(e.id,s.id)}))
+      .filter(x=>x.sc!==null&&x.sc!==undefined&&!isNaN(x.sc))
+      .sort((a,b)=>((a.d||'')>(b.d||'')?1:-1)).map(x=>x.sc);
+    if(totals.length>=2){ const drop=totals[totals.length-1]-totals[totals.length-2];
+      if(drop<=-5) out.push({name:s.name, id:s.id, grade:s.grade, drop}); }
+  });
+  return out.sort((a,b)=>a.drop-b.drop);
+}
+
+function renderDashboardToday(){
+  const box=document.getElementById('dash-today'); if(!box) return;
+  const staff=isStaff();
+  const t=todayStr();
+  const todayClasses=todaySchedules('수업'), todayConsults=todaySchedules('상담');
+  const todayExams=(DB.exams||[]).filter(e=>e.date===t);
+  const hws=dueHomeworks(), notices=activeNotices('all').slice(0,4), declining=decliningStudents(), dday=nextExamDDay();
+  const sName=id=>{const s=findStudent(id);return s?s.name:'';};
+
+  const bits=[];
+  if(todayExams.length) bits.push(`오늘 시험 <b>${todayExams.length}건</b>`);
+  if(todayClasses.length) bits.push(`오늘 수업 <b>${todayClasses.length}건</b>`);
+  if(todayConsults.length) bits.push(`상담 <b>${todayConsults.length}건</b>`);
+  const dueToday=hws.filter(h=>h.dueDate===t).length;
+  if(dueToday) bits.push(`오늘 마감 숙제 <b>${dueToday}건</b>`);
+  if(declining.length) bits.push(`성적 하락 주의 <b>${declining.length}명</b>`);
+  const aiMsg = bits.length ? bits.join(' · ')+' 입니다. 우선순위대로 챙겨보세요.' : '오늘 급한 일정은 없습니다. 학생 성장 현황을 점검해 보세요.';
+
+  const addBtn=(fn,label)=> staff?`<button class="btn btn-gold btn-sm today-add" onclick="${fn}"><span class="msym">add</span>${label}</button>`:'';
+  const del=(fn)=> staff?`<button class="lk-del" onclick="${fn}" title="삭제"><span class="msym">close</span></button>`:'';
+  const empty=m=>`<div class="today-empty">${m}</div>`;
+  const card=(icon,title,btn,inner)=>`<div class="card today-card"><div class="today-h"><span class="msym">${icon}</span><span class="tt">${title}</span>${btn||''}</div><div class="today-c">${inner}</div></div>`;
+
+  box.innerHTML = `
+    <div class="card ai-alert"><div class="ai-h"><span class="msym">smart_toy</span>AI 알림</div><div class="ai-b">${aiMsg}</div></div>
+    <div class="today-grid">
+      ${card('event_available','오늘 수업', addBtn("openScheduleModal('수업')",'추가'),
+        todayClasses.length? todayClasses.map(s=>`<div class="today-item"><span>${s.time?`<b>${s.time}</b> `:''}${s.title}${s.studentId?` · ${sName(s.studentId)}`:''}</span>${del(`deleteSchedule('${s.id}')`)}</div>`).join('') : empty('오늘 등록된 수업이 없습니다.'))}
+      ${card('quiz','오늘 시험','',
+        todayExams.length? todayExams.map(e=>`<div class="today-item"><span>${e.name} <span class="badge badge-navy">${e.type}</span></span></div>`).join('') : empty('오늘 예정된 시험이 없습니다.'))}
+      ${card('record_voice_over','오늘 상담', addBtn("openScheduleModal('상담')",'추가'),
+        todayConsults.length? todayConsults.map(s=>`<div class="today-item"><span>${s.time?`<b>${s.time}</b> `:''}${s.title}${s.studentId?` · ${sName(s.studentId)}`:''}</span>${del(`deleteSchedule('${s.id}')`)}</div>`).join('') : empty('오늘 예정된 상담이 없습니다.'))}
+      ${card('assignment','숙제 제출', addBtn('openHomeworkModal()','추가'),
+        hws.length? hws.slice(0,4).map(h=>{const st=homeworkStats(h);return `<div class="today-item"><span>${h.title}${h.dueDate?` <span class="helper">~${h.dueDate}</span>`:''}<br><span class="helper">제출 ${st.done}/${st.total}</span></span>${del(`deleteHomework('${h.id}')`)}</div>`;}).join('') : empty('등록된 숙제가 없습니다.'))}
+      ${card('campaign','공지', addBtn('openNoticeModal()','추가'),
+        notices.length? notices.map(n=>`<div class="today-item"><span><b>${n.title}</b>${n.body?`<br><span class="helper">${n.body}</span>`:''}</span>${del(`deleteNotice('${n.id}')`)}</div>`).join('') : empty('등록된 공지가 없습니다.'))}
+      ${card('trending_down','최근 성적 하락','',
+        declining.length? declining.slice(0,5).map(d=>`<div class="today-item"><span class="sd-name-link" onclick="openStudentDrawer('${d.id}')">${d.name} <span class="helper">${d.grade||''}</span></span><span class="badge badge-red">${d.drop}점</span></div>`).join('') : empty('성적이 하락한 학생이 없습니다.'))}
+    </div>
+    ${dday?`<div class="card dday-card"><span class="msym">flag</span>다음 시험 <b>${dday.name}</b> · ${dday.dday===0?'<b style="color:#eac076;">오늘!</b>':`<b style="color:#eac076;">D-${dday.dday}</b>`} <span class="helper">(${dday.date})</span></div>`:''}
+  `;
+}
 function renderDashboard(){
+  renderDashboardToday();
   const mine = managedStudents();
   const mineIds = new Set(mine.map(s=>s.id));
   const teacherScoped = isTeacherUser();
@@ -2258,8 +2513,9 @@ function openLectureModal(id){
   const tsel = document.getElementById('lecture-teacher');
   tsel.innerHTML = `<option value="">미지정</option>` + DB.teachers.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
   if(id){
-    const l = DB.lectures.find(x=>x.id===id);
-    document.getElementById('lecture-title').value = l.title;
+    const l = (DB.lectures||[]).find(x=>x.id===id);
+    if(!l) return;
+    document.getElementById('lecture-title').value = l.title||'';
     document.getElementById('lecture-stage').value = l.stage||'mid';
     syncLectureSubject(l.subject);
     tsel.value = l.teacherId||'';
@@ -2512,13 +2768,15 @@ function openNaesinModal(sid, rid){
   GB_EDIT_SID=sid;
   document.getElementById('naesin-modal-title').textContent = rid?'내신 성적 수정':'내신 성적 추가';
   document.getElementById('naesin-id').value = rid||'';
-  const s=DB.students.find(x=>x.id===sid);
+  const s=findStudent(sid);
   if(rid){
-    const r=s.naesin.find(x=>x.id===rid);
-    document.getElementById('naesin-term').value=r.term||'1학년 1학기';
-    document.getElementById('naesin-subject').value=r.subject||'';
-    document.getElementById('naesin-score').value=r.score!=null?r.score:'';
-    document.getElementById('naesin-grade').value=r.grade||'';
+    const r=(s && Array.isArray(s.naesin)) ? s.naesin.find(x=>x.id===rid) : null;
+    if(r){
+      document.getElementById('naesin-term').value=r.term||'1학년 1학기';
+      document.getElementById('naesin-subject').value=r.subject||'';
+      document.getElementById('naesin-score').value=r.score!=null?r.score:'';
+      document.getElementById('naesin-grade').value=r.grade||'';
+    }
   } else {
     document.getElementById('naesin-subject').value='';
     document.getElementById('naesin-score').value='';
@@ -2540,8 +2798,9 @@ function saveNaesin(){
   saveDB(); closeNaesinModal(); refreshGradebookViews();
 }
 function deleteNaesin(sid, rid){
-  if(!confirm('삭제하시겠습니까?')) return;
-  const s=DB.students.find(x=>x.id===sid); s.naesin=s.naesin.filter(x=>x.id!==rid);
+  if(!confirm('이 내신 기록을 삭제하시겠습니까?')) return;
+  const s=findStudent(sid); if(!s) return;
+  s.naesin=(s.naesin||[]).filter(x=>x.id!==rid);
   saveDB(); refreshGradebookViews();
 }
 /* mock modal */
@@ -2549,10 +2808,11 @@ function openMockModal(sid, mid){
   GB_EDIT_SID=sid;
   document.getElementById('mock-modal-title').textContent = mid?'모의고사 수정':'모의고사 추가';
   document.getElementById('mock-id').value = mid||'';
-  const s=DB.students.find(x=>x.id===sid);
-  const g = mid ? (s.mock.find(x=>x.id===mid).subjects||{}) : {};
-  document.getElementById('mock-name').value = mid? s.mock.find(x=>x.id===mid).name||'' : '';
-  document.getElementById('mock-date').value = mid? s.mock.find(x=>x.id===mid).date||'' : new Date().toISOString().slice(0,10);
+  const s=findStudent(sid);
+  const rec = (mid && s && Array.isArray(s.mock)) ? s.mock.find(x=>x.id===mid) : null;
+  const g = (rec && rec.subjects) || {};
+  document.getElementById('mock-name').value = rec ? (rec.name||'') : '';
+  document.getElementById('mock-date').value = rec ? (rec.date||'') : new Date().toISOString().slice(0,10);
   document.getElementById('mock-kor').value=g['국어']||''; document.getElementById('mock-math').value=g['수학']||'';
   document.getElementById('mock-eng').value=g['영어']||''; document.getElementById('mock-sci').value=g['탐구']||'';
   document.getElementById('mock-modal-overlay').classList.add('active');
@@ -2572,8 +2832,9 @@ function saveMock(){
   saveDB(); closeMockModal(); refreshGradebookViews();
 }
 function deleteMock(sid, mid){
-  if(!confirm('삭제하시겠습니까?')) return;
-  const s=DB.students.find(x=>x.id===sid); s.mock=s.mock.filter(x=>x.id!==mid);
+  if(!confirm('이 모의고사 기록을 삭제하시겠습니까?')) return;
+  const s=findStudent(sid); if(!s) return;
+  s.mock=(s.mock||[]).filter(x=>x.id!==mid);
   saveDB(); refreshGradebookViews();
 }
 function refreshGradebookViews(){
@@ -3521,8 +3782,9 @@ function openTeacherModal(id){
   document.getElementById('teacher-modal-title').textContent = id ? '선생님 정보 수정' : '선생님 추가';
   document.getElementById('teacher-id').value = id||'';
   if(id){
-    const t = DB.teachers.find(x=>x.id===id);
-    document.getElementById('teacher-name').value = t.name;
+    const t = findTeacher(id);
+    if(!t) return;
+    document.getElementById('teacher-name').value = t.name||'';
     document.getElementById('teacher-subject').value = t.subject||'';
     document.getElementById('teacher-phone').value = t.phone||'';
   } else {
@@ -3620,6 +3882,106 @@ function renderStudentFilterChips(counts){
     return `<button class="chip${active}" onclick="setStudentFilter('${val}')">${label}<span class="cnt">${n}</span></button>`;
   }).join('');
 }
+/* ===== 학생 상세 Drawer ===== */
+function studentRecentExam(sid){
+  const withScore = (DB.exams||[])
+    .map(e=>({e, sc: studentTotal(e.id, sid)}))
+    .filter(x=> x.sc!==null && x.sc!==undefined && !isNaN(x.sc))
+    .sort((a,b)=> ((a.e.date||'')>(b.e.date||'')?-1:1));
+  if(!withScore.length) return null;
+  const top = withScore[0];
+  const ranks = examRanks(top.e.id);
+  const r = ranks.find(x=>x.studentId===sid);
+  return { name: top.e.name, date: top.e.date, score: top.sc, max: top.e.max||100, rank: r?r.rank:null, total: ranks.length };
+}
+function drawerRivalInfo(sid){
+  const rv = DB.rivals && DB.rivals[sid];
+  if(!rv || !rv.rivalId) return { name:'없음', record:'' };
+  const rival = findStudent(rv.rivalId);
+  const name = rival ? rival.name : '-';
+  const matches = (DB.rivalMatches||[]).filter(m=> m && m.studentId===sid && m.rivalId===rv.rivalId);
+  let w=0,l=0; matches.forEach(m=>{ if(m.result==='win')w++; else if(m.result==='lose')l++; });
+  return { name, record: (w||l)?`${w}승 ${l}패`:'' };
+}
+function drawerAIAnalysis(s){
+  const totals = (DB.exams||[])
+    .map(e=>({d:e.date, sc:studentTotal(e.id, s.id)}))
+    .filter(x=>x.sc!==null && x.sc!==undefined && !isNaN(x.sc))
+    .sort((a,b)=>((a.d||'')>(b.d||'')?1:-1))
+    .map(x=>x.sc);
+  if(totals.length<2){
+    return '아직 분석할 시험 데이터가 충분하지 않습니다. 시험을 2회 이상 응시하면 성적 추세를 자동으로 분석해 드립니다.';
+  }
+  const avg = arr=> arr.reduce((a,b)=>a+b,0)/arr.length;
+  const recent = totals.slice(-3);
+  const prev = totals.slice(-6,-3);
+  const rAvg = avg(recent), pAvg = prev.length?avg(prev):totals[0];
+  const diff = rAvg - pAvg;
+  let trend;
+  if(diff>3) trend = `최근 성적이 <b>상승세</b>입니다 (직전 구간 대비 +${diff.toFixed(1)}점). 현재 학습 페이스를 유지하도록 격려해 주세요.`;
+  else if(diff<-3) trend = `최근 성적이 <b>하락</b>하고 있습니다 (직전 구간 대비 ${diff.toFixed(1)}점). 원인 파악을 위한 상담을 권장합니다.`;
+  else trend = `최근 성적이 <b>안정적</b>으로 유지되고 있습니다 (변동 ${diff>=0?'+':''}${diff.toFixed(1)}점).`;
+  const ach = (DB.achievement && DB.achievement[s.id]) || {};
+  let extra = '';
+  if((ach.attendance||0)>=10) extra = ' 출석이 성실해 학습 태도가 좋습니다.';
+  else if((ach.attendance||0)===0) extra = ' 출결 기록이 없어 학습 참여 확인이 필요합니다.';
+  return trend + extra;
+}
+function openStudentDrawer(id){
+  const s = findStudent(id); if(!s) return;
+  const head=document.getElementById('sd-head'), body=document.getElementById('sd-body'), foot=document.getElementById('sd-foot');
+  if(!head||!body||!foot) return;
+  const init = (s.name||'?').slice(0,1);
+  head.innerHTML = `
+    <button class="sd-close" onclick="closeStudentDrawer()" title="닫기"><span class="msym">close</span></button>
+    <div class="sd-ava">${init}</div>
+    <div class="sd-htxt">
+      <div class="nm">${s.name||'-'}${statusBadge(s)}</div>
+      <div class="sub">${s.grade||''} ${s.cls||''} · ${s.nickname?('닉네임 '+s.nickname):('학번 '+(s.studentNo||'-'))}</div>
+    </div>`;
+  const ex = studentRecentExam(s.id);
+  const rivalInfo = drawerRivalInfo(s.id);
+  const ach = (DB.achievement && DB.achievement[s.id]) || {};
+  const acts = (DB.activity && DB.activity[s.id]) || [];
+  const tn = teacherName(s.teacherId);
+  body.innerHTML = `
+    <div class="sd-sec"><h4><span class="msym">badge</span>기본 정보</h4>
+      <div class="sd-card">
+        <div class="sd-row"><span class="k">담당 선생님</span><span class="v">${tn?tn+' 선생님':'미지정'}</span></div>
+        <div class="sd-row"><span class="k">학년 / 반</span><span class="v">${s.grade||'-'} ${s.cls||''}</span></div>
+        <div class="sd-row"><span class="k">학습 과정</span><span class="v">${courseLabel(s)||'-'}</span></div>
+        <div class="sd-row"><span class="k">연락처</span><span class="v">${s.phone||'-'}</span></div>
+      </div></div>
+    <div class="sd-sec"><h4><span class="msym">quiz</span>최근 시험</h4>
+      <div class="sd-card">${ex ? `
+        <div class="sd-row"><span class="k">${ex.name}</span><span class="v">${fmt(ex.score)}점 / ${ex.max}점</span></div>
+        <div class="sd-row"><span class="k">석차</span><span class="v">${ex.rank?ex.rank+'위 / '+ex.total+'명':'-'}</span></div>
+        <div class="sd-row"><span class="k">응시일</span><span class="v">${ex.date||'-'}</span></div>`
+        : `<div class="sd-actlog">아직 응시한 시험이 없습니다.</div>`}</div></div>
+    <div class="sd-sec"><h4><span class="msym">sports_kabaddi</span>라이벌</h4>
+      <div class="sd-card"><div class="sd-row"><span class="k">현재 라이벌</span><span class="v">${rivalInfo.name}</span></div>${rivalInfo.record?`<div class="sd-row"><span class="k">전적</span><span class="v">${rivalInfo.record}</span></div>`:''}</div></div>
+    <div class="sd-sec"><h4><span class="msym">auto_awesome</span>AI 분석</h4>
+      <div class="sd-ai"><div class="badge-ai"><span class="msym" style="font-size:14px;">smart_toy</span>AXIS AI 자동 분석</div>${drawerAIAnalysis(s)}</div></div>
+    <div class="sd-sec"><h4><span class="msym">fact_check</span>출결 · 숙제</h4>
+      <div class="sd-card">
+        <div class="sd-row"><span class="k">누적 출석</span><span class="v">${ach.attendance||0}회</span></div>
+        <div class="sd-row"><span class="k">학습일수</span><span class="v">${ach.studyDays||0}일</span></div>
+        <div class="sd-row"><span class="k">숙제 제출</span><span class="v">${ach.homeworkCompleted||0}회</span></div>
+      </div></div>
+    <div class="sd-sec"><h4><span class="msym">forum</span>최근 상담 · 활동</h4>
+      <div class="sd-card sd-actlog">${acts.length ? acts.slice(0,5).map(a=>`<div>${(a.at||'').slice(0,10)} · ${a.text||a.type||'-'}</div>`).join('') : '기록이 없습니다.'}</div></div>`;
+  foot.innerHTML = isStaff()
+    ? `<button class="btn btn-ghost" onclick="closeStudentDrawer()">닫기</button><button class="btn btn-primary" onclick="closeStudentDrawer();openStudentModal('${s.id}')"><span class="msym">edit</span>정보 수정</button>`
+    : `<button class="btn btn-ghost" onclick="closeStudentDrawer()">닫기</button>`;
+  const ov=document.getElementById('sd-overlay'), dr=document.getElementById('sd-drawer');
+  if(ov) ov.classList.add('active');
+  if(dr){ dr.classList.add('active'); dr.setAttribute('aria-hidden','false'); }
+}
+function closeStudentDrawer(){
+  const ov=document.getElementById('sd-overlay'), dr=document.getElementById('sd-drawer');
+  if(ov) ov.classList.remove('active');
+  if(dr){ dr.classList.remove('active'); dr.setAttribute('aria-hidden','true'); }
+}
 function renderStudents(){
   const q = (document.getElementById('student-search').value||'').trim().toLowerCase();
   const base = managedStudents();
@@ -3653,7 +4015,7 @@ function renderStudents(){
       : '';
     return `
     <tr>
-      <td style="font-weight:600;">${s.name}${statusBadge(s)}
+      <td style="font-weight:600;"><span class="sd-name-link" onclick="openStudentDrawer('${s.id}')">${s.name}</span>${statusBadge(s)}
         <div style="font-weight:400;font-size:11px;color:var(--on-surface-variant);margin-top:3px;">학번 ${s.studentNo||'-'}${gwBadge(s.id)}</div></td>
       <td>${s.grade} ${s.cls||''}</td>
       <td>${tname ? tname : '<span style="color:var(--on-surface-variant);">미지정</span>'}</td>
@@ -3699,8 +4061,9 @@ function openStudentModal(id){
   document.getElementById('student-modal-title').textContent = id ? '학생 정보 수정' : '학생 추가';
   document.getElementById('student-id').value = id||'';
   if(id){
-    const s = DB.students.find(x=>x.id===id);
-    document.getElementById('student-name').value = s.name;
+    const s = findStudent(id);
+    if(!s) return;
+    document.getElementById('student-name').value = s.name||'';
     document.getElementById('student-grade').value = s.grade;
     document.getElementById('student-class').value = s.cls||'';
     document.getElementById('student-phone').value = s.phone||'';
@@ -3908,8 +4271,9 @@ function openExamModal(id){
   document.getElementById('exam-modal-title').textContent = id ? '시험 정보 수정' : '시험 추가';
   document.getElementById('exam-id').value = id||'';
   if(id){
-    const ex = DB.exams.find(x=>x.id===id);
-    document.getElementById('exam-name').value = ex.name;
+    const ex = findExam(id);
+    if(!ex) return;
+    document.getElementById('exam-name').value = ex.name||'';
     document.getElementById('exam-date').value = ex.date||'';
     document.getElementById('exam-type').value = ex.type;
     renderQuestionRows(ex.questions||[]);
@@ -4023,10 +4387,11 @@ function deleteExam(id){
 /* ---------- score input ---------- */
 function renderScoreTable(){
   const sel = document.getElementById('score-exam-select');
-  const examId = sel.value;
   const body = document.getElementById('score-table-body');
   const head = document.getElementById('score-table-head');
   const emptyEl = document.getElementById('score-empty');
+  if(!sel || !body || !emptyEl) return;
+  const examId = sel.value;
   const exam = DB.exams.find(e=>e.id===examId);
   const guide = document.getElementById('score-guide');
 
@@ -4215,16 +4580,20 @@ function renderStatsCharts(){
 
   // trend student select
   const trendSel = document.getElementById('trend-student-select');
-  const prevVal = trendSel.value;
-  trendSel.innerHTML = managedStudents().map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-  if(DB.students.length){
-    trendSel.value = DB.students.find(s=>s.id===prevVal) ? prevVal : DB.students[0].id;
+  if(trendSel){
+    const prevVal = trendSel.value;
+    trendSel.innerHTML = managedStudents().map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    if(DB.students.length){
+      trendSel.value = DB.students.find(s=>s.id===prevVal) ? prevVal : DB.students[0].id;
+    }
   }
   renderTrendChart();
 }
 
 function renderTrendChart(){
-  const studentId = document.getElementById('trend-student-select').value;
+  const trendSel = document.getElementById('trend-student-select');
+  if(!trendSel) return;
+  const studentId = trendSel.value;
   const type = document.getElementById('stats-type-filter') ? document.getElementById('stats-type-filter').value : '전체';
   const sorted = examsByType(type);
   const labels = sorted.map(e=>e.name);
