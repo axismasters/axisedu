@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- AXIS LMS · index.html · v1.9 (사이드바 메뉴 스크롤: 로그아웃 항상 보이게) -->
+<!-- AXIS LMS · index.html · v2.0 (비번 초기화 + 재원/휴원/퇴원 상태 + 퇴원 선생님명단 제외) -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -57,6 +57,8 @@ h1,h2,h3,.serif{font-family:'Libre Caslon Text',serif;}
 .nav::-webkit-scrollbar{width:6px;}
 .nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px;}
 .nav{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent;}
+.sidebar-brand,.user-box,.user-course,.child-switcher,.sidebar-foot{flex-shrink:0;}
+.status-sel{font-size:12px;padding:5px 8px;border:1px solid var(--outline);border-radius:8px;background:var(--surface);color:var(--on-surface);vertical-align:middle;margin-right:4px;cursor:pointer;}
 .nav a{
   display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;color:rgba(255,255,255,.7);
   text-decoration:none;font-size:14px;font-weight:500;cursor:pointer;border-left:3px solid transparent;
@@ -3424,6 +3426,7 @@ function renderTeachers(){
       <td>${t.phone||'-'}</td>
       <td>${count}명</td>
       <td style="text-align:right;">
+        ${isAdminUser() ? `<button class="btn btn-ghost btn-sm" onclick="resetAccountPassword('${t.phone||''}','${(t.name||'').replace(/'/g,'')} 선생님')" title="비밀번호 초기화"><span class="msym">key</span></button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="openTeacherModal('${t.id}')"><span class="msym">edit</span>수정</button>
         <button class="btn btn-danger-ghost btn-sm" onclick="deleteTeacher('${t.id}')"><span class="msym">delete</span>삭제</button>
       </td>
@@ -3565,6 +3568,39 @@ function deleteTeacher(id){
 }
 
 /* ---------- render: students ---------- */
+function statusBadge(s){
+  const st = (s&&s.status)||'재원';
+  if(st==='휴원') return ' <span class="badge" style="background:#fef3c7;color:#92400e;">휴원</span>';
+  if(st==='퇴원') return ' <span class="badge" style="background:#fee2e2;color:#991b1b;">퇴원</span>';
+  return '';
+}
+function setStudentStatus(id, val){
+  if(!isAdminUser()){ alert('상태 변경은 마스터(최고관리자)만 가능합니다.'); renderStudents(); return; }
+  const s = DB.students.find(x=>x.id===id); if(!s){ return; }
+  const prev = s.status||'재원';
+  if(val===prev) return;
+  if(val==='퇴원'){
+    if(!confirm(`${s.name} 학생을 '퇴원' 처리합니다.\n\n• 선생님 화면의 명단에서 자동으로 제외됩니다.\n• 데이터는 그대로 보존되며, 언제든 '재원'으로 되돌릴 수 있습니다.\n• 로그인 계정은 유지됩니다(필요하면 따로 관리).\n\n진행할까요?`)){ renderStudents(); return; }
+  }
+  s.status = val;
+  saveDB();
+  renderStudents();
+  try{ gwToast('', `${s.name} → ${val} 처리됨`, ''); }catch(e){}
+}
+async function resetAccountPassword(phoneOrId, label){
+  if(!isAdminUser()){ alert('비밀번호 초기화는 마스터(최고관리자)만 가능합니다.'); return; }
+  if(!(window.CLOUD && window.CLOUD.enabled)){ alert('클라우드(Supabase) 연결 상태에서만 비밀번호를 초기화할 수 있습니다.'); return; }
+  const raw = String(phoneOrId||'').trim();
+  const lid = /\d/.test(raw) ? Auth.norm(raw) : raw.toLowerCase();
+  if(!lid){ alert('이 계정은 전화번호(로그인 ID)가 없어 초기화할 수 없습니다.'); return; }
+  if(!confirm(`${label||lid} 계정의 비밀번호를 초기화합니다.\n\n초기 비밀번호는 axis1234가 되고,\n다음 로그인 때 새 비밀번호로 변경하게 됩니다.\n\n진행할까요?`)) return;
+  try{
+    const { data, error } = await CLOUD.sb.functions.invoke('reset-password', { body:{ login_id: lid } });
+    if(error){ alert('초기화 함수 호출 실패: '+(error.message||error)+'\n(reset-password 함수가 배포돼 있는지 확인하세요)'); return; }
+    if(data && data.error){ alert(data.error); return; }
+    alert(`${data.name||label||lid} 계정의 비밀번호를 axis1234로 초기화했습니다.\n해당 사용자에게 "휴대폰 번호 + axis1234"로 로그인 후 변경하도록 안내하세요.`);
+  }catch(e){ console.error('reset-password failed', e); alert('비밀번호 초기화 중 오류: '+(e.message||e)); }
+}
 function renderStudents(){
   const q = (document.getElementById('student-search').value||'').trim().toLowerCase();
   const list = managedStudents().filter(s=>s.name.toLowerCase().includes(q));
@@ -3573,16 +3609,30 @@ function renderStudents(){
   body.innerHTML = list.map(s=>{
     const course = courseLabel(s);
     const tname = teacherName(s.teacherId);
+    const st = s.status||'재원';
+    const adminCtl = isAdminUser();
+    const statusCell = adminCtl
+      ? `<select class="status-sel" onchange="setStudentStatus('${s.id}', this.value)" title="재원 상태">
+           <option value="재원" ${st==='재원'?'selected':''}>재원</option>
+           <option value="휴원" ${st==='휴원'?'selected':''}>휴원</option>
+           <option value="퇴원" ${st==='퇴원'?'selected':''}>퇴원</option>
+         </select>`
+      : '';
+    const resetBtn = adminCtl
+      ? `<button class="btn btn-ghost btn-sm" onclick="resetAccountPassword('${s.phone||''}','${(s.name||'').replace(/'/g,'')} 학생')" title="비밀번호 초기화"><span class="msym">key</span></button>`
+      : '';
     return `
     <tr>
-      <td style="font-weight:600;">${s.name}
+      <td style="font-weight:600;">${s.name}${statusBadge(s)}
         <div style="font-weight:400;font-size:11px;color:var(--on-surface-variant);margin-top:3px;">학번 ${s.studentNo||'-'}${gwBadge(s.id)}</div></td>
       <td>${s.grade} ${s.cls||''}</td>
       <td>${tname ? tname : '<span style="color:var(--on-surface-variant);">미지정</span>'}</td>
       <td>${course ? `<span class="badge badge-gold">${course}</span>` : '<span style="color:var(--on-surface-variant);">-</span>'}</td>
       <td>${s.phone||'-'}<br><span style="color:var(--on-surface-variant);font-size:12px;">학부모 ${s.parentPhone||'-'}</span></td>
       <td>${s.kakao||'-'} <span style="color:var(--outline);">/</span> ${s.parentKakao||'-'}</td>
-      <td style="text-align:right;">
+      <td style="text-align:right;white-space:nowrap;">
+        ${statusCell}
+        ${resetBtn}
         <button class="btn btn-ghost btn-sm" onclick="openStudentModal('${s.id}')"><span class="msym">edit</span>수정</button>
         <button class="btn btn-danger-ghost btn-sm" onclick="deleteStudent('${s.id}')"><span class="msym">delete</span>삭제</button>
       </td>
@@ -4823,7 +4873,7 @@ function isAdminUser(){ return SESSION && SESSION.role==='admin'; }
 function isTeacherUser(){ return SESSION && SESSION.role==='teacher'; }
 /* students the current staff user is allowed to manage/see */
 function managedStudents(){
-  if(isTeacherUser()) return DB.students.filter(s=>s.teacherId===SESSION.teacherId);
+  if(isTeacherUser()) return DB.students.filter(s=>s.teacherId===SESSION.teacherId && (s.status||'재원')!=='퇴원');
   return DB.students.slice();
 }
 function canSeeStudent(id){
