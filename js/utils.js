@@ -49,6 +49,9 @@ function uid(){ return 'id_' + Math.random().toString(36).slice(2,10) + Date.now
 function findStudent(id){ return (DB.students||[]).find(s=>s&&s.id===id) || null; }
 function findExam(id){ return (DB.exams||[]).find(e=>e&&e.id===id) || null; }
 function findTeacher(id){ return (DB.teachers||[]).find(t=>t&&t.id===id) || null; }
+/* 공통 모달 열기/닫기 (overlay id 기준) */
+function openModal(id){ const m=document.getElementById(id); if(m) m.classList.add('active'); }
+function closeModal(id){ const m=document.getElementById(id); if(m) m.classList.remove('active'); }
 
 /* ---------- seed sample data (only if empty) ---------- */
 function seedIfEmpty(){

@@ -250,9 +250,9 @@ function openStudentModal(id){
     document.getElementById('student-level').value='기본';
     renderSubjectChips([]);
   }
-  document.getElementById('student-modal-overlay').classList.add('active');
+  openModal('student-modal-overlay');
 }
-function closeStudentModal(){ document.getElementById('student-modal-overlay').classList.remove('active'); }
+function closeStudentModal(){ closeModal('student-modal-overlay'); }
 
 /* ===== 학생 일괄 등록 + Supabase 계정 자동 생성 (마스터 전용) ===== */
 function openBulkStudentModal(){
@@ -263,9 +263,9 @@ function openBulkStudentModal(){
   if(tsel) tsel.innerHTML = `<option value="">미지정</option>` + DB.teachers.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
   const res = document.getElementById('bulk-result'); res.style.display='none'; res.textContent='';
   const btn = document.getElementById('bulk-submit-btn'); btn.disabled=false; btn.textContent='등록하고 계정 생성';
-  document.getElementById('bulk-modal-overlay').classList.add('active');
+  openModal('bulk-modal-overlay');
 }
-function closeBulkStudentModal(){ document.getElementById('bulk-modal-overlay').classList.remove('active'); }
+function closeBulkStudentModal(){ closeModal('bulk-modal-overlay'); }
 
 function parseBulkLines(text){
   const rows=[], errs=[];

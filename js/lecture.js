@@ -91,9 +91,9 @@ function openLectureModal(id){
     document.getElementById('lecture-youtube').value='';
     document.getElementById('lecture-note').value='';
   }
-  document.getElementById('lecture-modal-overlay').classList.add('active');
+  openModal('lecture-modal-overlay');
 }
-function closeLectureModal(){ document.getElementById('lecture-modal-overlay').classList.remove('active'); }
+function closeLectureModal(){ closeModal('lecture-modal-overlay'); }
 function saveLecture(){
   const title = document.getElementById('lecture-title').value.trim();
   if(!title){ alert('강의 제목을 입력해주세요.'); return; }

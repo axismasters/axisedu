@@ -54,9 +54,9 @@ function openExamModal(id){
     document.getElementById('exam-type').value='모의고사';
     renderQuestionRows([]);
   }
-  document.getElementById('exam-modal-overlay').classList.add('active');
+  openModal('exam-modal-overlay');
 }
-function closeExamModal(){ document.getElementById('exam-modal-overlay').classList.remove('active'); }
+function closeExamModal(){ closeModal('exam-modal-overlay'); }
 
 /* ---- question builder in exam modal ---- */
 function renderQuestionRows(questions){

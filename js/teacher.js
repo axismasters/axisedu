@@ -212,9 +212,9 @@ function openTeacherModal(id){
   } else {
     ['teacher-name','teacher-subject','teacher-phone'].forEach(i=>document.getElementById(i).value='');
   }
-  document.getElementById('teacher-modal-overlay').classList.add('active');
+  openModal('teacher-modal-overlay');
 }
-function closeTeacherModal(){ document.getElementById('teacher-modal-overlay').classList.remove('active'); }
+function closeTeacherModal(){ closeModal('teacher-modal-overlay'); }
 function saveTeacher(){
   const name = document.getElementById('teacher-name').value.trim();
   if(!name){ alert('이름을 입력해주세요.'); return; }

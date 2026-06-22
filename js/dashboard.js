@@ -16,7 +16,7 @@ function openNoticeModal(){ if(!isStaff()){alert('공지는 선생님/마스터�
   document.getElementById('notice-title').value='';
   document.getElementById('notice-body').value='';
   document.getElementById('notice-scope').value='all';
-  document.getElementById('notice-modal-overlay').classList.add('active');
+  openModal('notice-modal-overlay');
 }
 function closeNoticeModal(){ const m=document.getElementById('notice-modal-overlay'); if(m) m.classList.remove('active'); }
 function saveNotice(){
@@ -36,7 +36,7 @@ function openHomeworkModal(){ if(!isStaff()){alert('숙제는 선생님/마스�
   document.getElementById('hw-title').value='';
   document.getElementById('hw-subject').value='';
   document.getElementById('hw-due').value=todayStr();
-  document.getElementById('homework-modal-overlay').classList.add('active');
+  openModal('homework-modal-overlay');
 }
 function closeHomeworkModal(){ const m=document.getElementById('homework-modal-overlay'); if(m) m.classList.remove('active'); }
 function saveHomework(){
@@ -62,7 +62,7 @@ function openScheduleModal(type){ if(!isStaff()){alert('일정은 선생님/마�
   document.getElementById('sch-time').value='';
   const ssel=document.getElementById('sch-student');
   if(ssel) ssel.innerHTML='<option value="">(개별 학생 선택 안 함)</option>'+managedStudents().map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-  document.getElementById('schedule-modal-overlay').classList.add('active');
+  openModal('schedule-modal-overlay');
 }
 function closeScheduleModal(){ const m=document.getElementById('schedule-modal-overlay'); if(m) m.classList.remove('active'); }
 function saveSchedule(){

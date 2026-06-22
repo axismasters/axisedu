@@ -225,9 +225,9 @@ function openNaesinModal(sid, rid){
     document.getElementById('naesin-score').value='';
     document.getElementById('naesin-grade').value='';
   }
-  document.getElementById('naesin-modal-overlay').classList.add('active');
+  openModal('naesin-modal-overlay');
 }
-function closeNaesinModal(){ document.getElementById('naesin-modal-overlay').classList.remove('active'); }
+function closeNaesinModal(){ closeModal('naesin-modal-overlay'); }
 function saveNaesin(){
   const sid=GB_EDIT_SID; const s=DB.students.find(x=>x.id===sid); if(!s) return;
   if(!Array.isArray(s.naesin)) s.naesin=[];
@@ -258,9 +258,9 @@ function openMockModal(sid, mid){
   document.getElementById('mock-date').value = rec ? (rec.date||'') : new Date().toISOString().slice(0,10);
   document.getElementById('mock-kor').value=g['국어']||''; document.getElementById('mock-math').value=g['수학']||'';
   document.getElementById('mock-eng').value=g['영어']||''; document.getElementById('mock-sci').value=g['탐구']||'';
-  document.getElementById('mock-modal-overlay').classList.add('active');
+  openModal('mock-modal-overlay');
 }
-function closeMockModal(){ document.getElementById('mock-modal-overlay').classList.remove('active'); }
+function closeMockModal(){ closeModal('mock-modal-overlay'); }
 function saveMock(){
   const sid=GB_EDIT_SID; const s=DB.students.find(x=>x.id===sid); if(!s) return;
   if(!Array.isArray(s.mock)) s.mock=[];
