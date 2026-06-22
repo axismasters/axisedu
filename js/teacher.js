@@ -9,7 +9,7 @@ function renderMyInfo(){
   if(!body || !SESSION) return;
   if(SESSION.role==='admin'){
     // editing a teacher record if logged in via teacher phone; else generic admin
-    const t = DB.teachers.find(x=>x.id===SESSION.teacherId);
+    const t = findTeacher(SESSION.teacherId);
     if(t){
       body.innerHTML = `
         <div class="field"><label>이름</label><input type="text" id="mi-name" value="${t.name||''}"></div>
@@ -23,7 +23,7 @@ function renderMyInfo(){
     return;
   }
   if(SESSION.role==='parent'){
-    const kids = (SESSION.childIds||[]).map(id=>DB.students.find(s=>s.id===id)).filter(Boolean);
+    const kids = (SESSION.childIds||[]).map(id=>findStudent(id)).filter(Boolean);
     body.innerHTML = `
       <div class="field"><label>학부모 전화번호 (로그인 ID)</label><input type="text" id="mi-pphone" value="${SESSION.parentPhone||''}"></div>
       <p class="helper" style="margin:-6px 0 16px;">번호를 바꾸면 연결된 자녀(${kids.map(k=>k.name).join(', ')})의 학부모 연락처도 함께 변경됩니다.</p>
@@ -31,7 +31,7 @@ function renderMyInfo(){
     return;
   }
   // student
-  const s = DB.students.find(x=>x.id===SESSION.studentId);
+  const s = findStudent(SESSION.studentId);
   if(!s){ body.innerHTML=''; return; }
   body.innerHTML = `
     <div class="field-row">
@@ -55,7 +55,7 @@ function renderMyInfo(){
 }
 async function saveMyInfo(){
   if(SESSION.role==='admin'){
-    const t = DB.teachers.find(x=>x.id===SESSION.teacherId);
+    const t = findTeacher(SESSION.teacherId);
     if(t){
       t.name = document.getElementById('mi-name').value.trim()||t.name;
       t.subject = document.getElementById('mi-subject').value.trim();
@@ -65,12 +65,12 @@ async function saveMyInfo(){
     saveDB();
   } else if(SESSION.role==='parent'){
     const np = document.getElementById('mi-pphone').value.trim();
-    (SESSION.childIds||[]).forEach(id=>{ const s=DB.students.find(x=>x.id===id); if(s) s.parentPhone=np; });
+    (SESSION.childIds||[]).forEach(id=>{ const s=findStudent(id); if(s) s.parentPhone=np; });
     SESSION.parentPhone = normalizePhone(np);
     saveDB();
   } else {
     // 학생: 본인 항목만 서버에 안전하게 저장 (전화번호=로그인ID는 변경 불가)
-    const s = DB.students.find(x=>x.id===SESSION.studentId);
+    const s = findStudent(SESSION.studentId);
     let updates = null;
     if(s){
       const newName = document.getElementById('mi-name').value.trim();
@@ -93,7 +93,7 @@ async function saveMyInfo(){
         }
       }catch(e){ console.error('self-update failed', e); alert('서버 저장 중 오류가 발생했습니다.'); }
     }
-    try{ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }catch(e){}
+    saveLocal();
   }
   // refresh session storage copy
   const store = localStorage.getItem(SESSION_KEY) ? localStorage : sessionStorage;
@@ -229,7 +229,7 @@ function saveTeacher(){
     phone,
   };
   if(id){
-    const t = DB.teachers.find(x=>x.id===id);
+    const t = findTeacher(id);
     if(!t){ alert('대상 선생님을 찾을 수 없습니다. 목록을 새로고침해 주세요.'); return; }
     Object.assign(t, data);
   }

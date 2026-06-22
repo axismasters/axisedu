@@ -85,3 +85,6 @@ function saveDB(){
   return okLocal;
 }
 
+/* 로컬 캐시 전용 저장 (클라우드/용량경고 없이 localStorage에만 기록) */
+function saveLocal(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }catch(e){} }
+

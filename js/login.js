@@ -276,10 +276,10 @@ function restoreSession(){
     if(s.role==='admin'){
       // 최고관리자 (master)
     } else if(s.role==='teacher'){
-      const t = DB.teachers.find(x=>x.id===s.teacherId) || DB.teachers.find(x=>Auth.norm(x.phone)===Auth.norm(s.phone));
+      const t = findTeacher(s.teacherId) || DB.teachers.find(x=>Auth.norm(x.phone)===Auth.norm(s.phone));
       if(!t) return false; s.name = t.name; s.teacherId = t.id;
     } else if(s.role==='student'){
-      const stu = DB.students.find(x=>x.id===s.studentId) || DB.students.find(x=>Auth.norm(x.phone)===Auth.norm(s.phone));
+      const stu = findStudent(s.studentId) || DB.students.find(x=>Auth.norm(x.phone)===Auth.norm(s.phone));
       if(!stu) return false; s.studentId = stu.id; s.name = stu.name; s.account = stu.account;
     } else if(s.role==='parent'){
       const kids = Auth.childrenOf(s.parentPhone);
@@ -304,7 +304,7 @@ function managedStudents(){
 }
 function canSeeStudent(id){
   if(isAdminUser()) return true;
-  if(isTeacherUser()) { const s=DB.students.find(x=>x.id===id); return s && s.teacherId===SESSION.teacherId; }
+  if(isTeacherUser()) { const s=findStudent(id); return s && s.teacherId===SESSION.teacherId; }
   return false;
 }
 
@@ -344,7 +344,7 @@ function enterApp(){
   // course/teacher panel (viewer only)
   const uc = document.getElementById('user-course');
   if(viewer){
-    const s = DB.students.find(x=>x.id===SESSION.studentId);
+    const s = findStudent(SESSION.studentId);
     const course = courseLabel(s);
     const tname = teacherName(s && s.teacherId);
     uc.innerHTML = `
@@ -380,7 +380,7 @@ function renderChildSwitcher(){
   if(SESSION && SESSION.role==='parent' && SESSION.childIds && SESSION.childIds.length>1){
     box.innerHTML = `<label style="color:rgba(255,255,255,.6);font-size:11px;margin:0 0 6px;">자녀 선택</label>
       <select id="child-select" onchange="switchChild(this.value)">
-        ${SESSION.childIds.map(id=>{const s=DB.students.find(x=>x.id===id);return `<option value="${id}" ${id===SESSION.studentId?'selected':''}>${s?s.name:''}</option>`;}).join('')}
+        ${SESSION.childIds.map(id=>{const s=findStudent(id);return `<option value="${id}" ${id===SESSION.studentId?'selected':''}>${s?s.name:''}</option>`;}).join('')}
       </select>`;
     box.classList.remove('hidden');
   } else {
@@ -390,7 +390,7 @@ function renderChildSwitcher(){
 function switchChild(id){
   SESSION.studentId = id;
   // refresh course panel + views
-  const s = DB.students.find(x=>x.id===id);
+  const s = findStudent(id);
   const uc = document.getElementById('user-course');
   if(uc){
     uc.innerHTML = `
@@ -402,7 +402,7 @@ function switchChild(id){
 
 /* ---------- student views ---------- */
 function buildReportHTML(studentId){
-  const s = DB.students.find(x=>x.id===studentId);
+  const s = findStudent(studentId);
   if(!s) return `<div class="empty"><span class="msym">person_off</span>학생 정보를 찾을 수 없습니다.</div>`;
   const sortedExams = [...DB.exams].sort((a,b)=> (a.date<b.date?1:-1));
   const rows = sortedExams.map(ex=>{
@@ -479,7 +479,7 @@ function renderMyTrend(){
   const studentId = SESSION.studentId;
 
   // course/teacher banner
-  const me = DB.students.find(x=>x.id===studentId);
+  const me = findStudent(studentId);
   const course = courseLabel(me);
   const tname = teacherName(me && me.teacherId);
   document.getElementById('my-course-banner').innerHTML = `
@@ -574,7 +574,7 @@ window.CLOUD = {
         Object.keys(DB).forEach(k=>{ delete DB[k]; });
         Object.assign(DB, cloud);
         try{ Auth.migrate(); }catch(e){}
-        try{ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }catch(e){}
+        saveLocal();
         return true;
       }
       await this.push(true);   // 클라우드가 비어 있으면 현재 데이터를 올린다

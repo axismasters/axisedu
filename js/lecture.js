@@ -48,7 +48,7 @@ function renderMyLectures(){
   const grid = document.getElementById('my-lecture-grid');
   if(!grid) return;
   // show lectures matching the viewer's current course stage/subject first, then all
-  const me = DB.students.find(x=>x.id===SESSION.studentId);
+  const me = findStudent(SESSION.studentId);
   let list = [...DB.lectures];
   const mysubs = studentSubjects(me);
   list.sort((a,b)=>{

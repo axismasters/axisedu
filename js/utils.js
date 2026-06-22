@@ -182,11 +182,11 @@ document.querySelectorAll('.nav a').forEach(a=>{
 
 /* ---------- helpers ---------- */
 function studentName(id){
-  const s = DB.students.find(x=>x.id===id);
+  const s = findStudent(id);
   return s ? s.name : '(삭제된 학생)';
 }
 function teacherName(id){
-  const t = DB.teachers.find(x=>x.id===id);
+  const t = findTeacher(id);
   return t ? t.name : '';
 }
 function courseLabel(s){
@@ -205,7 +205,7 @@ function studentTotal(examId, studentId){
   const v = map[studentId];
   if(v===null || v===undefined || v==='') return null;
   if(typeof v === 'object'){
-    const exam = DB.exams.find(e=>e.id===examId);
+    const exam = findExam(examId);
     if(!exam || !exam.questions || !exam.questions.length) return null;
     let sum = 0, answered = false;
     exam.questions.forEach(q=>{

@@ -134,7 +134,7 @@ function saveExam(){
     questions,
   };
   if(id){
-    const ex = DB.exams.find(x=>x.id===id);
+    const ex = findExam(id);
     if(!ex){ alert('대상 시험을 찾을 수 없습니다. 목록을 새로고침해 주세요.'); return; }
     Object.assign(ex, data);
   } else {
@@ -147,7 +147,7 @@ function saveExam(){
   renderAll();
 }
 function deleteExam(id){
-  const ex = DB.exams.find(x=>x.id===id);
+  const ex = findExam(id);
   if(!ex){ return; }
   if(!confirm(`'${ex.name}' 시험을 삭제하시겠습니까?\n\n입력된 점수와 이 시험으로 만들어진 라이벌 대결 기록도 함께 삭제됩니다. (되돌릴 수 없음)`)) return;
   DB.exams = DB.exams.filter(x=>x.id!==id);
@@ -163,7 +163,7 @@ function renderScoreTable(){
   const emptyEl = document.getElementById('score-empty');
   if(!sel || !body || !emptyEl) return;
   const examId = sel.value;
-  const exam = DB.exams.find(e=>e.id===examId);
+  const exam = findExam(examId);
   const guide = document.getElementById('score-guide');
 
   if(!examId || !DB.students.length || !exam){
@@ -275,7 +275,7 @@ function setEssay(examId, studentId, qNo, val, maxPts){
 }
 function updateScore(examId, inputEl){
   if(!DB.scores[examId]) DB.scores[examId] = {};
-  const exam = DB.exams.find(e=>e.id===examId);
+  const exam = findExam(examId);
   const max = exam ? (Number(exam.max)||100) : 100;
   const raw = (inputEl.value||'').trim();
   let stored;
@@ -355,7 +355,7 @@ function renderStatsCharts(){
     const prevVal = trendSel.value;
     trendSel.innerHTML = managedStudents().map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
     if(DB.students.length){
-      trendSel.value = DB.students.find(s=>s.id===prevVal) ? prevVal : DB.students[0].id;
+      trendSel.value = findStudent(prevVal) ? prevVal : DB.students[0].id;
     }
   }
   renderTrendChart();

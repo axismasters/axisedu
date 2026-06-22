@@ -9,7 +9,7 @@ function renderReportSelect(){
   const prevVal = sel.value;
   sel.innerHTML = managedStudents().map(s=>`<option value="${s.id}">${s.name} (${s.grade} ${s.cls||''})</option>`).join('');
   if(DB.students.length){
-    sel.value = DB.students.find(s=>s.id===prevVal) ? prevVal : DB.students[0].id;
+    sel.value = findStudent(prevVal) ? prevVal : DB.students[0].id;
   }
   renderReportCard();
 }
@@ -21,7 +21,7 @@ function renderReportCard(){
     wrap.innerHTML = `<div class="empty" id="report-empty"><span class="msym">description</span>학생을 선택하면 성적표가 표시됩니다.</div>`;
     return;
   }
-  const s = DB.students.find(x=>x.id===studentId);
+  const s = findStudent(studentId);
   const sortedExams = [...DB.exams].sort((a,b)=> (a.date<b.date?1:-1));
 
   const rows = sortedExams.map(ex=>{

@@ -12,7 +12,7 @@ function statusBadge(s){
 }
 function setStudentStatus(id, val){
   if(!isAdminUser()){ alert('상태 변경은 마스터(최고관리자)만 가능합니다.'); renderStudents(); return; }
-  const s = DB.students.find(x=>x.id===id); if(!s){ return; }
+  const s = findStudent(id); if(!s){ return; }
   const prev = s.status||'재원';
   if(val===prev) return;
   if(val==='퇴원'){
@@ -375,7 +375,7 @@ function saveStudent(){
     note: document.getElementById('student-note').value.trim(),
   };
   if(id){
-    const s = DB.students.find(x=>x.id===id);
+    const s = findStudent(id);
     if(!s){ alert('대상 학생을 찾을 수 없습니다. 목록을 새로고침해 주세요.'); return; }
     delete s.courseSubject; delete s.courseStage;
     Object.assign(s, data);
@@ -392,7 +392,7 @@ function saveStudent(){
   if(!id && isValidPhone(parentPhone)) autoCreateAccount('parent', name+' 학부모', parentPhone); // 학부모 계정도 자동 생성
 }
 function deleteStudent(id){
-  const s = DB.students.find(x=>x.id===id);
+  const s = findStudent(id);
   if(!s){ return; }
   if(!confirm(`'${s.name}' 학생을 삭제하시겠습니까?\n\n삭제 시 성적·라이벌·상담(활동)·포인트·엠블럼·목표·학부모 연결 기록도 함께 삭제됩니다. (되돌릴 수 없음)`)) return;
   DB.students = DB.students.filter(x=>x.id!==id);

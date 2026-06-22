@@ -188,7 +188,7 @@ function renderDashboard(){
   if(lastExam){
     const ranks = examRanks(lastExam.id);
     ranks.filter(r=>r.score<60 && mineIds.has(r.studentId)).forEach(r=>{
-      const s = DB.students.find(x=>x.id===r.studentId);
+      const s = findStudent(r.studentId);
       if(s) watchRows.push(`<tr><td>${s.name}</td><td>${s.grade} ${s.cls||''}</td><td><span class="badge badge-red">${r.score}</span></td></tr>`);
     });
   }

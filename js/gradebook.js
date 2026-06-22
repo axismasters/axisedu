@@ -30,7 +30,7 @@ function renderHomer(){
     return;
   }
   const examId = sel.value;
-  const exam = DB.exams.find(e=>e.id===examId);
+  const exam = findExam(examId);
   const studentId = SESSION.studentId;
   const rec = (DB.scores[examId] && typeof DB.scores[examId][studentId]==='object') ? DB.scores[examId][studentId] : {byQ:{}};
   const byQ = rec.byQ||{};
@@ -116,7 +116,7 @@ function renderRankBoard(){
   const medal=['🥇','🥈','🥉','4','5'];
   wrap.innerHTML = `<table><thead><tr><th style="width:60px;">등수</th><th>닉네임</th><th>점수</th></tr></thead><tbody>${
     ranks.map((r,i)=>{
-      const s=DB.students.find(x=>x.id===r.studentId);
+      const s=findStudent(r.studentId);
       const me = r.studentId===myId;
       return `<tr style="${me?'background:rgba(200,161,90,.12);':''}">
         <td style="font-size:16px;">${medal[i]||(i+1)}</td>
@@ -134,7 +134,7 @@ function gradebookTarget(){
 function canEditGrades(){ return isViewer() || isStaff(); } // students edit own; staff can edit too
 
 function gradebookHTML(studentId, editable){
-  const s = DB.students.find(x=>x.id===studentId);
+  const s = findStudent(studentId);
   if(!s) return `<div class="card"><div class="empty"><span class="msym">person_off</span>학생을 선택하세요.</div></div>`;
   if(!Array.isArray(s.naesin)) s.naesin=[];
   if(!Array.isArray(s.mock)) s.mock=[];
@@ -229,7 +229,7 @@ function openNaesinModal(sid, rid){
 }
 function closeNaesinModal(){ closeModal('naesin-modal-overlay'); }
 function saveNaesin(){
-  const sid=GB_EDIT_SID; const s=DB.students.find(x=>x.id===sid); if(!s) return;
+  const sid=GB_EDIT_SID; const s=findStudent(sid); if(!s) return;
   if(!Array.isArray(s.naesin)) s.naesin=[];
   const rid=document.getElementById('naesin-id').value;
   const data={ term:document.getElementById('naesin-term').value, subject:document.getElementById('naesin-subject').value.trim(),
@@ -262,7 +262,7 @@ function openMockModal(sid, mid){
 }
 function closeMockModal(){ closeModal('mock-modal-overlay'); }
 function saveMock(){
-  const sid=GB_EDIT_SID; const s=DB.students.find(x=>x.id===sid); if(!s) return;
+  const sid=GB_EDIT_SID; const s=findStudent(sid); if(!s) return;
   if(!Array.isArray(s.mock)) s.mock=[];
   const mid=document.getElementById('mock-id').value;
   const subjects={};

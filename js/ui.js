@@ -15,7 +15,7 @@ function growthStudentId(){ return SESSION && SESSION.studentId ? SESSION.studen
 /* 기존 DB(시험/성적/라이벌)에서 achievementData 파생 → 엔진 초기화 */
 function buildAchievementData(sid){
   const d = GW.createAchievementData();
-  const stu = DB.students.find(s=>s.id===sid) || {};
+  const stu = findStudent(sid) || {};
   d.nickname = stu.nickname || stu.name || '학생';
   // ---- 시험/성적 ----
   const exams = DB.exams.slice().sort((a,b)=>((a.date||'')>(b.date||'')?1:-1));

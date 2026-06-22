@@ -127,7 +127,7 @@ function setRival(studentId, rivalId){
   }
   saveDB();
 }
-function nickById(id){ const s=DB.students.find(x=>x.id===id); return s? (s.nickname||('익명·'+s.name.slice(0,1)+'**')) : '-'; }
+function nickById(id){ const s=findStudent(id); return s? (s.nickname||('익명·'+s.name.slice(0,1)+'**')) : '-'; }
 
 /* win rule -> compare two students on one exam, returns my result */
 function decideResult(studentId, rivalId, examId){
@@ -149,7 +149,7 @@ function decideResult(studentId, rivalId, examId){
 
 /* called after admin enters/updates a 단원테스트 score: recompute matches for that exam */
 function recalcRivalForExam(examId){
-  const exam = DB.exams.find(e=>e.id===examId); if(!exam) return;
+  const exam = findExam(examId); if(!exam) return;
   const examType = exam.type || '단원테스트';
   DB.students.forEach(s=>{
     const rivalId = getRivalId(s.id); if(!rivalId) return;
@@ -215,7 +215,7 @@ function evaluateEmblems(){
 
 /* AI recommendation: most similar by blended metrics */
 function recommendRival(studentId){
-  const me = DB.students.find(x=>x.id===studentId); if(!me) return null;
+  const me = findStudent(studentId); if(!me) return null;
   const myAvg = recentExamAvg(studentId) ?? 0;
   const myGrowth = growthRate(studentId);
   const myVol = learnVolume(studentId);
@@ -295,7 +295,7 @@ function renderMyRival(){
   const recentDots = st.recent.length? st.recent.map(r=>`<span class="rdot ${r}">${r==='win'?'승':(r==='lose'?'패':'무')}</span>`).join('') : '<span class="helper">경기 없음</span>';
 
   // revenge flash (one-time) + available revenge banner
-  const meStu = DB.students.find(x=>x.id===me);
+  const meStu = findStudent(me);
   let revengeFlash='';
   if(meStu && meStu._revengeFlash){
     meStu._revengeFlash=false; saveDB();
@@ -592,7 +592,7 @@ function renderRivalAdmin(){
       </div>
       <table><thead><tr><th>시즌명</th><th>기간</th><th>상태</th><th style="text-align:right;">관리</th></tr></thead>
       <tbody>${DB.seasons.length? DB.seasons.map(s=>{
-        const champ = s.championId? ((DB.students.find(x=>x.id===s.championId)||{}).name||'-') : null;
+        const champ = s.championId? ((findStudent(s.championId)||{}).name||'-') : null;
         const status = s.closed
           ? `<span class="badge badge-navy">마감</span>${champ?` <span class="helper">🏆 ${champ}</span>`:''}`
           : (s.active?'<span class="badge badge-gold">진행중</span>':'<span class="badge badge-navy">대기</span>');
@@ -621,7 +621,7 @@ function renderRivalAdmin(){
       <div style="overflow-x:auto;"><table>
         <thead><tr><th>순위</th><th>학생</th><th>시즌 포인트</th><th>경기</th><th>승</th><th>패</th><th>승률</th></tr></thead>
         <tbody>${hasPlay? rk.map((r,i)=>{
-          const s = DB.students.find(x=>x.id===r.id)||{};
+          const s = findStudent(r.id)||{};
           return `<tr>
             <td>${i===0?'🏆 ':''}${i+1}</td>
             <td style="font-weight:600;">${s.name||'-'} <span class="helper">(${s.nickname||'-'})</span></td>
@@ -643,7 +643,7 @@ function renderRivalAdmin(){
           return `<tr>
             <td style="font-weight:600;">${s.name}</td>
             <td>${s.nickname||'-'}</td>
-            <td>${rid? s.name&&DB.students.find(x=>x.id===rid)?DB.students.find(x=>x.id===rid).name:'-' : '<span class="helper">없음</span>'}</td>
+            <td>${rid? s.name&&findStudent(rid)?findStudent(rid).name:'-' : '<span class="helper">없음</span>'}</td>
             <td>${st.total}전 ${st.win}승 ${st.lose}패</td>
             <td>${st.curStreak} (최고 ${st.bestStreak})</td>
             <td>${selectedByCount(s.id)}명</td>
@@ -675,7 +675,7 @@ function closeSeason(id){
   const s = DB.seasons.find(x=>x.id===id); if(!s || s.closed) return;
   const rk = seasonRanking(s);
   const winner = rk.find(r=>r.total>0 || r.points>0) || null;
-  const wName = winner? ((DB.students.find(x=>x.id===winner.id)||{}).name||'-') : '없음';
+  const wName = winner? ((findStudent(winner.id)||{}).name||'-') : '없음';
   if(!confirm(`'${s.name}'을(를) 마감할까요?\n\n현재 1위: ${wName}\n마감하면 순위가 확정되고 챔피언 보상이 지급됩니다. (되돌릴 수 없음)`)) return;
   s.active = false;
   s.closed = true;
