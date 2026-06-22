@@ -325,8 +325,9 @@ async function submitBulkStudents(){
     const results = (data && data.results) || [];
     let ok=0, ex=0, fail=0; const lines=[];
     results.forEach(r=>{
-      if(r.ok){ ok++; lines.push(`✓ ${r.name} (${r.login_id})`); }
-      else if(/already|exists|registered/i.test(r.error||'')){ ex++; lines.push(`• ${r.name} (${r.login_id}) 이미 계정 있음`); }
+      const k = classifyAcctResult(r);
+      if(k==='ok'){ ok++; lines.push(`✓ ${r.name} (${r.login_id})`); }
+      else if(k==='exists'){ ex++; lines.push(`• ${r.name} (${r.login_id}) 이미 계정 있음`); }
       else { fail++; lines.push(`✗ ${r.name} (${r.login_id}) ${r.error||''}`); }
     });
     res.textContent = `학생 ${added}명 추가${skipped?`, ${skipped}명 기존`:''}\n계정: 생성 ${ok} · 기존 ${ex} · 실패 ${fail}\n\n`

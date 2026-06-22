@@ -135,8 +135,9 @@ async function autoCreateAccount(role, name, phone){
     if(error){ acctToast(`⚠️ ${name} 계정 생성 실패: ${error.message||error}`); return; }
     if(data && data.error){ acctToast(`⚠️ ${data.error}`); return; }
     const r = (data && data.results && data.results[0]) || {};
-    if(r.ok) acctToast(`✓ ${name} 로그인 계정 생성됨 · 휴대폰 + 초기비번 axis1234`);
-    else if(/already|exists|registered/i.test(r.error||'')) acctToast(`${name} · 이미 계정이 있습니다`);
+    const k = classifyAcctResult(r);
+    if(k==='ok') acctToast(`✓ ${name} 로그인 계정 생성됨 · 휴대폰 + 초기비번 axis1234`);
+    else if(k==='exists') acctToast(`${name} · 이미 계정이 있습니다`);
     else acctToast(`⚠️ ${name} 계정 생성 실패: ${r.error||''}`);
   }catch(e){ console.error('autoCreateAccount', e); acctToast(`⚠️ ${name} 계정 생성 중 오류`); }
 }
@@ -160,12 +161,7 @@ async function createParentAccounts(){
     if(error){ alert('계정 생성 함수 호출 실패: '+(error.message||error)); return; }
     if(data && data.error){ alert(data.error); return; }
     const results = (data && data.results) || [];
-    let ok=0, ex=0, fail=0; const failed=[];
-    results.forEach(r=>{
-      if(r.ok) ok++;
-      else if(/already|exists|registered/i.test(r.error||'')) ex++;
-      else { fail++; failed.push(`${r.name}(${r.login_id}): ${r.error||''}`); }
-    });
+    const { ok, ex, fail, failed } = acctTally(results);
     let msg = `학부모 계정 — 생성 ${ok} · 기존 ${ex} · 실패 ${fail}`;
     if(failed.length) msg += `\n\n실패:\n`+failed.join('\n');
     msg += `\n\n학부모께 "휴대폰 번호 + 초기비밀번호 axis1234"를 안내하세요.`;
@@ -186,12 +182,7 @@ async function createTeacherAccounts(){
     if(error){ alert('계정 생성 함수 호출 실패: '+(error.message||error)+'\n\ncreate-students 함수가 최신 코드로 배포돼 있는지 확인하세요.'); return; }
     if(data && data.error){ alert(data.error); return; }
     const results = (data && data.results) || [];
-    let ok=0, ex=0, fail=0; const failed=[];
-    results.forEach(r=>{
-      if(r.ok) ok++;
-      else if(/already|exists|registered/i.test(r.error||'')) ex++;
-      else { fail++; failed.push(`${r.name}(${r.login_id}): ${r.error||''}`); }
-    });
+    const { ok, ex, fail, failed } = acctTally(results);
     let msg = `선생님 계정 — 생성 ${ok} · 기존 ${ex} · 실패 ${fail}`;
     if(noPhone.length) msg += `\n\n(휴대폰 미입력으로 제외: ${noPhone.map(t=>t.name).join(', ')})`;
     if(failed.length) msg += `\n\n실패:\n`+failed.join('\n');

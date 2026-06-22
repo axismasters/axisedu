@@ -52,6 +52,22 @@ function findTeacher(id){ return (DB.teachers||[]).find(t=>t&&t.id===id) || null
 /* 공통 모달 열기/닫기 (overlay id 기준) */
 function openModal(id){ const m=document.getElementById(id); if(m) m.classList.add('active'); }
 function closeModal(id){ const m=document.getElementById(id); if(m) m.classList.remove('active'); }
+/* 계정 생성 결과 분류/집계 (성공/기존/실패) */
+function classifyAcctResult(r){
+  if(r && r.ok) return 'ok';
+  if(/already|exists|registered/i.test((r && r.error) || '')) return 'exists';
+  return 'fail';
+}
+function acctTally(results){
+  let ok=0, ex=0, fail=0; const failed=[];
+  (results||[]).forEach(r=>{
+    const k = classifyAcctResult(r);
+    if(k==='ok') ok++;
+    else if(k==='exists') ex++;
+    else { fail++; failed.push(`${r.name}(${r.login_id}): ${r.error||''}`); }
+  });
+  return { ok, ex, fail, failed };
+}
 
 /* ---------- seed sample data (only if empty) ---------- */
 function seedIfEmpty(){
